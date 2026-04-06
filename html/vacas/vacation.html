@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>VTI Multi-Range Booking Fix</title>
+    <style>
+        body { font-family: sans-serif; background: #f4f4f9; padding: 20px; display: flex; justify-content: center; }
+        .box { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 5px 20px rgba(0,0,0,0.1); width: 100%; max-width: 550px; }
+        
+        .date-row { 
+            background: #f9f9f9; 
+            padding: 15px; 
+            border-radius: 8px; 
+            margin-bottom: 15px; 
+            border: 1px solid #eee;
+            position: relative;
+        }
+        
+        .date-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .controls-grid { 
+            display: flex; 
+            align-items: center; 
+            gap: 15px; 
+            margin-top: 10px; 
+            background: #fff; 
+            padding: 8px; 
+            border-radius: 4px;
+            border: 1px dashed #ccc;
+        }
+
+        label { font-size: 0.75rem; font-weight: bold; color: #555; display: block; }
+        input[type="date"], input[type="number"] { 
+            width: 100%; padding: 8px; margin-top: 5px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; 
+        }
+        
+        .auto-label { font-size: 0.75rem; display: flex; align-items: center; gap: 5px; cursor: pointer; color: #0056b3; }
+        .days-input { width: 50px !important; margin-top: 0 !important; padding: 4px !important; }
+
+        .row-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 12px;
+            border-top: 1px solid #eee;
+            padding-top: 10px;
+        }
+        .btn-small {
+            flex: 1; padding: 6px; font-size: 0.75em; border-radius: 4px; cursor: pointer; border: 1px solid #ddd; background: white; transition: all 0.2s;
+        }
+        .btn-small:hover { background: #f0f0f0; }
+
+        .btn { background: #0056b3; color: white; border: none; padding: 12px; width: 100%; border-radius: 6px; font-weight: bold; cursor: pointer; margin-top: 10px; }
+        .btn-add { background: #28a745; margin-bottom: 20px; }
+        .btn-copy { background: #6c757d; }
+        
+        .remove-btn { 
+            position: absolute; top: -8px; right: -8px; 
+            background: #d9534f; color: white; border-radius: 50%; 
+            width: 22px; height: 22px; border: none; cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+        }
+        #status { color: #28a745; font-size: 0.9em; text-align: center; margin-top: 10px; font-weight: bold; height: 1.2em; }
+    </style>
+</head>
+<body>
+
+<div class="box">
+    <h3 style="margin-top:0">VTI Multi-Range Tool</h3>
+    
+    <div id="date-container">
+        <div class="date-row">
+            <div class="date-grid">
+                <div>
+                    <label>Check-in</label>
+                    <input type="date" class="in-date" value="2026-07-04" oninput="syncDates(this)">
+                </div>
+                <div>
+                    <label>Check-out</label>
+                    <input type="date" class="out-date" value="2026-07-11">
+                </div>
+            </div>
+            
+            <div class="controls-grid">
+                <label class="auto-label">
+                    <input type="checkbox" class="auto-check" checked> Link Dates
+                </label>
+                <div style="display:flex; align-items:center; gap:5px;">
+                    <span style="font-size:0.7rem; color:#666">+</span>
+                    <input type="number" class="days-input" value="7" min="1" oninput="syncDates(this)">
+                    <span style="font-size:0.7rem; color:#666">days</span>
+                </div>
+            </div>
+
+            <div class="row-actions">
+                <button class="btn-small" onclick="processSingle(this, 'copy')">📋 Copy</button>
+                <button class="btn-small" onclick="processSingle(this, 'open')">↗️ Open</button>
+            </div>
+        </div>
+    </div>
+
+    <button class="btn btn-add" onclick="addRow()">+ Add Date Range</button>
+    <button class="btn" onclick="processAll('open')">Open All Tabs</button>
+    <button class="btn btn-copy" onclick="processAll('copy')">Copy All Links</button>
+    
+    <div id="status"></div>
+</div>
+
+<script>
+    function syncDates(element) {
+        const row = element.closest('.date-row');
+        const isAuto = row.querySelector('.auto-check').checked;
+        const checkinInput = row.querySelector('.in-date');
+        const checkoutInput = row.querySelector('.out-date');
+        const daysInput = row.querySelector('.days-input');
+
+        if (isAuto && checkinInput.value) {
+            const date = new Date(checkinInput.value);
+            const offset = parseInt(daysInput.value) || 0;
+            date.setDate(date.getDate() + offset);
+            checkoutInput.value = date.toISOString().split('T')[0];
+        }
+    }
+
+    function addRow() {
+        const container = document.getElementById('date-container');
+        const div = document.createElement('div');
+        div.className = 'date-row';
+        div.innerHTML = `
+            <button class="remove-btn" onclick="this.parentElement.remove()">✕</button>
+            <div class="date-grid">
+                <div>
+                    <label>Check-in</label>
+                    <input type="date" class="in-date" oninput="syncDates(this)">
+                </div>
+                <div>
+                    <label>Check-out</label>
+                    <input type="date" class="out-date">
+                </div>
+            </div>
+            <div class="controls-grid">
+                <label class="auto-label">
+                    <input type="checkbox" class="auto-check" checked> Link Dates
+                </label>
+                <div style="display:flex; align-items:center; gap:5px;">
+                    <span style="font-size:0.7rem; color:#666">+</span>
+                    <input type="number" class="days-input" value="7" min="1" oninput="syncDates(this)">
+                    <span style="font-size:0.7rem; color:#666">days</span>
+                </div>
+            </div>
+            <div class="row-actions">
+                <button class="btn-small" onclick="processSingle(this, 'copy')">📋 Copy</button>
+                <button class="btn-small" onclick="processSingle(this, 'open')">↗️ Open</button>
+            </div>
+        `;
+        container.appendChild(div);
+    }
+
+    function createUrl(checkin, checkout) {
+        const startTs = new Date(checkin + "T12:00:00").getTime();
+        const endTs = new Date(checkout + "T12:00:00").getTime();
+        return `https://booking.vti.it/book/simple/step2?checkin=${startTs}&checkout=${endTs}&guesttypes[0][20435]=2&ages[0][20435]=18&ages[0][20435]=18&guesttypes[0][20523]=1&ages[0][20523]=2&layout=15425&lang=en&currency=EUR&beginsearch=1&isnewsearch=1&searchId=${crypto.randomUUID()}&nsid=${crypto.randomUUID()}&winding=1`;
+    }
+
+    function processSingle(btn, mode) {
+        const row = btn.closest('.date-row');
+        const cin = row.querySelector('.in-date').value;
+        const cout = row.querySelector('.out-date').value;
+        if (!cin || !cout) return alert("Select dates");
+        
+        const url = createUrl(cin, cout);
+        if (mode === 'open') window.open(url, '_blank');
+        else navigator.clipboard.writeText(url).then(() => updateStatus("Copied!"));
+    }
+
+    function processAll(mode) {
+        const rows = document.querySelectorAll('.date-row');
+        const urls = [];
+        rows.forEach(r => {
+            const cin = r.querySelector('.in-date').value;
+            const cout = r.querySelector('.out-date').value;
+            if (cin && cout) urls.push(createUrl(cin, cout));
+        });
+        if (!urls.length) return alert("No dates set");
+
+        if (mode === 'open') {
+            urls.forEach(u => window.open(u, '_blank'));
+            updateStatus(`Opened ${urls.length} tabs`);
+        } else {
+            navigator.clipboard.writeText(urls.join('\n')).then(() => updateStatus("All copied!"));
+        }
+    }
+
+    function updateStatus(msg) {
+        const s = document.getElementById('status');
+        s.innerText = msg;
+        setTimeout(() => s.innerText = "", 3000);
+    }
+</script>
+
+</body>
+</html>
