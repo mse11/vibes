@@ -1,0 +1,353 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <title>VTI Multi-Range Dashboard</title>
+        <style>
+            :root {
+                --sidebar-width: 320px;
+                --primary: #0056b3;
+                --success: #28a745;
+            }
+            body {
+                font-family: sans-serif;
+                background: #e9ecef;
+                margin: 0;
+                display: flex;
+                height: 100vh;
+                overflow: hidden;
+            }
+
+            /* Sidebar Styling */
+            #sidebar {
+                width: var(--sidebar-width);
+                background: white;
+                border-right: 1px solid #ccc;
+                padding: 20px;
+                box-shadow: 2px 0 10px rgba(0, 0, 0, 0.05);
+                display: flex;
+                flex-direction: column;
+                overflow-y: auto;
+            }
+
+            /* Main Content Area */
+            #content-area {
+                flex-grow: 1;
+                background: #f4f4f9;
+                overflow-x: auto;
+                display: flex;
+                flex-direction: column;
+            }
+
+            #view-grid {
+                display: flex; /* Table-like one row behavior */
+                height: 100%;
+                gap: 10px;
+                padding: 10px;
+            }
+
+            .view-column {
+                min-width: 450px; /* Width of each "table column" */
+                height: 100%;
+                background: white;
+                border: 1px solid #ddd;
+                border-radius: 8px;
+                display: flex;
+                flex-direction: column;
+            }
+
+            .view-header {
+                padding: 8px;
+                background: #eee;
+                font-size: 0.8rem;
+                font-weight: bold;
+                text-align: center;
+                border-bottom: 1px solid #ddd;
+            }
+
+            iframe {
+                flex-grow: 1;
+                border: none;
+                width: 100%;
+            }
+
+            /* Original GUI Components Adapted for Sidebar */
+            .date-row {
+                background: #f9f9f9;
+                padding: 12px;
+                border-radius: 8px;
+                margin-bottom: 15px;
+                border: 1px solid #ddd;
+                position: relative;
+            }
+
+            .date-grid {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 8px;
+            }
+            .controls-grid {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                margin-top: 8px;
+                font-size: 0.8rem;
+            }
+
+            label {
+                font-size: 0.7rem;
+                font-weight: bold;
+                color: #555;
+                display: block;
+            }
+            input[type="date"],
+            input[type="number"] {
+                width: 100%;
+                padding: 6px;
+                margin-top: 4px;
+                border: 1px solid #ccc;
+                border-radius: 4px;
+                box-sizing: border-box;
+            }
+
+            .days-input {
+                width: 45px !important;
+            }
+
+            .btn {
+                background: var(--primary);
+                color: white;
+                border: none;
+                padding: 10px;
+                width: 100%;
+                border-radius: 6px;
+                font-weight: bold;
+                cursor: pointer;
+                margin-top: 8px;
+            }
+            .btn-add {
+                background: var(--success);
+                margin-bottom: 15px;
+            }
+            .btn-view {
+                background: #6f42c1;
+            } /* Purple for the new view mode */
+            .btn-copy {
+                background: #6c757d;
+                font-size: 0.8rem;
+            }
+
+            .remove-btn {
+                position: absolute;
+                top: -5px;
+                right: -5px;
+                background: #d9534f;
+                color: white;
+                border-radius: 50%;
+                width: 20px;
+                height: 20px;
+                border: none;
+                cursor: pointer;
+                font-size: 10px;
+            }
+
+            #status {
+                color: var(--success);
+                font-size: 0.85em;
+                text-align: center;
+                margin-top: 10px;
+                font-weight: bold;
+            }
+            .empty-state {
+                margin: auto;
+                color: #999;
+                text-align: center;
+            }
+        </style>
+    </head>
+    <body>
+        <div id="sidebar">
+            <h3 style="margin-top: 0">VTI Multi-Range</h3>
+
+            <div id="date-container">
+                <div class="date-row">
+                    <div class="date-grid">
+                        <div>
+                            <label>Check-in</label>
+                            <input
+                                type="date"
+                                class="in-date"
+                                value="2026-07-04"
+                                oninput="syncDates(this)"
+                            />
+                        </div>
+                        <div>
+                            <label>Check-out</label>
+                            <input
+                                type="date"
+                                class="out-date"
+                                value="2026-07-11"
+                            />
+                        </div>
+                    </div>
+                    <div class="controls-grid">
+                        <input type="checkbox" class="auto-check" checked />
+                        <span>Link +</span>
+                        <input
+                            type="number"
+                            class="days-input"
+                            value="7"
+                            min="1"
+                            oninput="syncDates(this)"
+                        />
+                        <span>days</span>
+                    </div>
+                </div>
+            </div>
+
+            <button class="btn btn-add" onclick="addRow()">
+                + Add Date Range
+            </button>
+            <button class="btn btn-view" onclick="renderView()">
+                Show All Side-by-Side
+            </button>
+
+            <hr
+                style="
+                    width: 100%;
+                    margin: 15px 0;
+                    border: 0;
+                    border-top: 1px solid #eee;
+                "
+            />
+
+            <button class="btn" onclick="processAll('open')">
+                Open All Tabs ↗️
+            </button>
+            <button class="btn btn-copy" onclick="processAll('copy')">
+                Copy All Links 📋
+            </button>
+
+            <div id="status"></div>
+        </div>
+
+        <div id="content-area">
+            <div id="view-grid">
+                <div class="empty-state">
+                    <h2>Preview Dashboard</h2>
+                    <p>
+                        Add dates and click "Show All Side-by-Side" to compare
+                        pages.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <script>
+            function syncDates(element) {
+                const row = element.closest(".date-row");
+                const isAuto = row.querySelector(".auto-check").checked;
+                const checkinInput = row.querySelector(".in-date");
+                const checkoutInput = row.querySelector(".out-date");
+                const daysInput = row.querySelector(".days-input");
+
+                if (isAuto && checkinInput.value) {
+                    const date = new Date(checkinInput.value);
+                    const offset = parseInt(daysInput.value) || 0;
+                    date.setDate(date.getDate() + offset);
+                    checkoutInput.value = date.toISOString().split("T")[0];
+                }
+            }
+
+            function addRow() {
+                const container = document.getElementById("date-container");
+                const div = document.createElement("div");
+                div.className = "date-row";
+                div.innerHTML = `
+            <button class="remove-btn" onclick="this.parentElement.remove()">✕</button>
+            <div class="date-grid">
+                <div>
+                    <label>Check-in</label>
+                    <input type="date" class="in-date" oninput="syncDates(this)">
+                </div>
+                <div>
+                    <label>Check-out</label>
+                    <input type="date" class="out-date">
+                </div>
+            </div>
+            <div class="controls-grid">
+                <input type="checkbox" class="auto-check" checked>
+                <span>Link +</span>
+                <input type="number" class="days-input" value="7" min="1" oninput="syncDates(this)">
+                <span>days</span>
+            </div>
+        `;
+                container.appendChild(div);
+            }
+
+            function createUrl(checkin, checkout) {
+                const startTs = new Date(checkin + "T12:00:00").getTime();
+                const endTs = new Date(checkout + "T12:00:00").getTime();
+                return `https://booking.vti.it/book/simple/step2?checkin=${startTs}&checkout=${endTs}&guesttypes[0][20435]=2&ages[0][20435]=18&ages[0][20435]=18&guesttypes[0][20523]=1&ages[0][20523]=2&layout=15425&lang=en&currency=EUR&beginsearch=1&isnewsearch=1&searchId=${crypto.randomUUID()}&nsid=${crypto.randomUUID()}&winding=1`;
+            }
+
+            function renderView() {
+                const rows = document.querySelectorAll(".date-row");
+                const grid = document.getElementById("view-grid");
+                grid.innerHTML = ""; // Clear current view
+
+                let count = 0;
+                rows.forEach((r) => {
+                    const cin = r.querySelector(".in-date").value;
+                    const cout = r.querySelector(".out-date").value;
+
+                    if (cin && cout) {
+                        count++;
+                        const url = createUrl(cin, cout);
+                        const col = document.createElement("div");
+                        col.className = "view-column";
+                        col.innerHTML = `
+                    <div class="view-header">${cin} to ${cout}</div>
+                    <iframe src="${url}"></iframe>
+                `;
+                        grid.appendChild(col);
+                    }
+                });
+
+                if (count === 0) {
+                    grid.innerHTML =
+                        '<div class="empty-state">No dates selected</div>';
+                } else {
+                    updateStatus(`Viewing ${count} ranges`);
+                }
+            }
+
+            function processAll(mode) {
+                const rows = document.querySelectorAll(".date-row");
+                const urls = [];
+                rows.forEach((r) => {
+                    const cin = r.querySelector(".in-date").value;
+                    const cout = r.querySelector(".out-date").value;
+                    if (cin && cout) urls.push(createUrl(cin, cout));
+                });
+
+                if (!urls.length) return alert("No dates set");
+
+                if (mode === "open") {
+                    urls.forEach((u) => window.open(u, "_blank"));
+                    updateStatus(`Opened ${urls.length} tabs`);
+                } else {
+                    navigator.clipboard
+                        .writeText(urls.join("\n"))
+                        .then(() => updateStatus("All URLs copied!"));
+                }
+            }
+
+            function updateStatus(msg) {
+                const s = document.getElementById("status");
+                s.innerText = msg;
+                setTimeout(() => (s.innerText = ""), 3000);
+            }
+        </script>
+    </body>
+</html>
