@@ -23,7 +23,7 @@ def cli():
 
 @cli.command()
 @click.option(
-    "--topic",
+    "--category",
     required=True,
     help="Category (e.g., pc, auto, reality, elektronika, domacnost, knihy, oblecenie, sport)",
 )
@@ -82,19 +82,19 @@ def cli():
     is_flag=True,
     help="Display results in console",
 )
-def search(topic, keyword, price_from, price_to, location, radius, pages, output, format, timeout, display):
+def search(category, keyword, price_from, price_to, location, radius, pages, output, format, timeout, display):
     """
     Search for listings on bazos.sk
 
     Examples:
 
-        scrape-bazos search --topic pc --keyword "nas"
+        scrape-bazos search --category pc --keyword "nas"
 
-        scrape-bazos search --topic pc --keyword "notebook" --price-from 500 --price-to 1000
+        scrape-bazos search --category pc --keyword "notebook" --price-from 500 --price-to 1000
 
-        scrape-bazos search --topic auto --keyword "skoda" --price-to 15000 --pages 3
+        scrape-bazos search --category auto --keyword "skoda" --price-to 15000 --pages 3
 
-        scrape-bazos search --topic reality --keyword "byt" --location "Bratislava" --radius 10
+        scrape-bazos search --category reality --keyword "byt" --location "Bratislava" --radius 10
     """
     try:
         # Create scraper
@@ -102,7 +102,7 @@ def search(topic, keyword, price_from, price_to, location, radius, pages, output
 
         # Build URL for reference
         url = scraper.build_url(
-            topic=topic,
+            category=category,
             keyword=keyword,
             price_from=price_from,
             price_to=price_to,
@@ -114,7 +114,7 @@ def search(topic, keyword, price_from, price_to, location, radius, pages, output
         # Scrape listings
         click.echo(f"📡 Scraping {pages} page(s)...")
         items = scraper.scrape_listings(
-            topic=topic,
+            category=category,
             keyword=keyword,
             price_from=price_from,
             price_to=price_to,
@@ -160,7 +160,7 @@ def search(topic, keyword, price_from, price_to, location, radius, pages, output
 
 @cli.command()
 @click.option(
-    "--topic",
+    "--category",
     default="pc",
     help="Category for example (default: pc)",
 )
@@ -169,17 +169,17 @@ def search(topic, keyword, price_from, price_to, location, radius, pages, output
     default="nas",
     help="Keyword for example (default: nas)",
 )
-def example(topic, keyword):
+def example(category, keyword):
     """
     Run an example search to test the scraper
     """
     click.echo("🔍 Running example search...\n")
     scraper = BazosScraper()
 
-    url = scraper.build_url(topic=topic, keyword=keyword)
+    url = scraper.build_url(category=category, keyword=keyword)
     click.echo(f"Search URL: {url}\n")
 
-    items = scraper.scrape_listings(topic=topic, keyword=keyword, max_pages=1)
+    items = scraper.scrape_listings(category=category, keyword=keyword, max_pages=1)
 
     click.echo(f"Found {len(items)} items:\n")
     for i, item in enumerate(items[:3], 1):
@@ -192,27 +192,26 @@ def example(topic, keyword):
 @cli.command()
 def categories():
     """
-    Show available categories
+    Show available categories fetched from bazos.sk
     """
-    categories_list = {
-        "pc": "Computers & IT",
-        "auto": "Automobiles",
-        "reality": "Real Estate",
-        "elektronika": "Electronics",
-        "domacnost": "Household Items",
-        "knihy": "Books",
-        "oblecenie": "Clothing",
-        "sport": "Sports Equipment",
-        "hudka": "Music",
-        "byty": "Apartments",
-        "motocykle": "Motorcycles",
-        "bicykle": "Bicycles",
-    }
+    try:
+        click.echo("📂 Fetching available categories from bazos.sk...\n")
+        scraper = BazosScraper()
+        categories_list = scraper.get_categories()
 
-    click.echo("📂 Available Categories:\n")
-    for topic, description in categories_list.items():
-        click.echo(f"  {click.style(topic.ljust(15), fg='cyan')} → {description}")
-    click.echo()
+        if not categories_list:
+            click.echo("❌ No categories found. Unable to fetch from bazos.sk.", err=True)
+            raise SystemExit(1)
+
+        click.echo("📂 Available Categories:\n")
+        for topic, description in sorted(categories_list.items()):
+            click.echo(f"  {click.style(topic.ljust(15), fg='cyan')} → {description}")
+        click.echo(f"\n✅ Found {len(categories_list)} categories")
+        click.echo()
+
+    except Exception as e:
+        click.echo(f"❌ Error fetching categories: {e}", err=True)
+        raise SystemExit(1)
 
 
 @cli.command()
@@ -235,7 +234,7 @@ def info():
         click.echo(f"  ✓ {feature}")
 
     click.echo(f"\n{click.style('Usage:', bold=True)}")
-    click.echo("  scrape-bazos search --topic pc --keyword 'nas'")
+    click.echo("  scrape-bazos search --category pc --keyword 'nas'")
     click.echo("  scrape-bazos example")
     click.echo("  scrape-bazos categories")
     click.echo(f"\n{click.style('Documentation:', bold=True)}")

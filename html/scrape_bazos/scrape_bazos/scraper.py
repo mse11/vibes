@@ -62,7 +62,7 @@ class BazosScraper:
 
     def build_url(
         self,
-        topic: str,
+        category: str,
         keyword: str,
         price_from: Optional[str] = None,
         price_to: Optional[str] = None,
@@ -73,7 +73,7 @@ class BazosScraper:
         Build the search URL for bazos.sk
 
         Args:
-            topic: Category (e.g., 'pc', 'auto', 'reality')
+            category: Category (e.g., 'pc', 'auto', 'reality')
             keyword: Search keyword (e.g., 'nas', 'notebook')
             price_from: Minimum price
             price_to: Maximum price
@@ -83,13 +83,13 @@ class BazosScraper:
         Returns:
             Full search URL
         """
-        # Normalize topic to lowercase (website URLs use lowercase)
-        topic = topic.lower()
-        base = self.BASE_URL.format(topic=topic)
+        # Normalize category to lowercase (website URLs use lowercase)
+        category = category.lower()
+        base = self.BASE_URL.format(topic=category)
 
         params = {
             "hledat": keyword,
-            "rubriky": topic,
+            "rubriky": category,
             "hlokalita": location,
             "humkreis": str(radius),
             "cenaod": price_from or "",
@@ -108,7 +108,7 @@ class BazosScraper:
 
     def scrape_listings(
         self,
-        topic: str,
+        category: str,
         keyword: str,
         price_from: Optional[str] = None,
         price_to: Optional[str] = None,
@@ -120,7 +120,7 @@ class BazosScraper:
         Scrape listings from bazos.sk
 
         Args:
-            topic: Category
+            category: Category
             keyword: Search keyword
             price_from: Minimum price
             price_to: Maximum price
@@ -135,7 +135,7 @@ class BazosScraper:
 
         for page in range(max_pages):
             url = self.build_url(
-                topic=topic,
+                category=category,
                 keyword=keyword,
                 price_from=price_from,
                 price_to=price_to,
@@ -153,7 +153,7 @@ class BazosScraper:
                 response = self.session.get(url, timeout=self.timeout)
                 response.raise_for_status()
 
-                page_items = self._parse_listings(response.text, topic)
+                page_items = self._parse_listings(response.text, category)
                 items.extend(page_items)
 
                 print(f"Found {len(page_items)} items on page {page + 1}")
@@ -164,7 +164,7 @@ class BazosScraper:
 
         return items
 
-    def _parse_listings(self, html: str, topic: str) -> List[BazosItem]:
+    def _parse_listings(self, html: str, category: str) -> List[BazosItem]:
         """Parse HTML and extract items"""
         soup = BeautifulSoup(html, "lxml")
         items = []
@@ -187,7 +187,7 @@ class BazosScraper:
 
         for container in item_containers:
             try:
-                item = self._extract_item(container, topic)
+                item = self._extract_item(container, category)
                 if item:
                     items.append(item)
             except Exception as e:
@@ -196,7 +196,7 @@ class BazosScraper:
 
         return items
 
-    def _extract_item(self, container, topic: str) -> Optional[BazosItem]:
+    def _extract_item(self, container, category: str) -> Optional[BazosItem]:
         """Extract item details from a container"""
 
         try:
@@ -213,7 +213,7 @@ class BazosScraper:
             item_url = title_link.get("href", "")
 
             if not item_url.startswith("http"):
-                item_url = f"https://{topic}.bazos.sk/{item_url}"
+                item_url = f"https://{category}.bazos.sk/{item_url}"
 
             # Extract image
             image_url = None
@@ -274,6 +274,45 @@ class BazosScraper:
             print(f"Error extracting item details: {e}")
             return None
 
+    def get_categories(self) -> Dict[str, str]:
+        """
+        Fetch available categories from bazos.sk
+
+        Returns:
+            Dictionary mapping category codes to descriptions, or empty dict if fetch fails
+        """
+        try:
+            # Fetch the main bazos.sk page to get the categories dropdown
+            response = self.session.get("https://pc.bazos.sk/", timeout=self.timeout)
+            response.raise_for_status()
+
+            soup = BeautifulSoup(response.text, "lxml")
+            categories = {}
+
+            # Find the select element with categories (name="rubriky")
+            select = soup.find("select", {"name": "rubriky"})
+
+            if not select:
+                raise ValueError("Could not find categories select element")
+
+            # Extract all options
+            options = select.find_all("option")
+
+            for option in options:
+                value = option.get("value", "").strip()
+                text = option.get_text(strip=True)
+
+                # Skip empty values
+                if value and text:
+                    categories[value] = text
+
+            return categories
+
+        except Exception as e:
+            print(f"Error fetching categories: {e}")
+            # Return empty dict on error
+            return {}
+
     def save_results(self, items: List[BazosItem], output_file: str) -> None:
         """Save results to JSON file"""
         data = {
@@ -294,7 +333,7 @@ def main():
 
     # Example: Search for NAS in PC category
     items = scraper.scrape_listings(
-        topic="pc",
+        category="pc",
         keyword="nas",
         max_pages=1,
     )
