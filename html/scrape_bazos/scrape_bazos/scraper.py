@@ -1,5 +1,5 @@
 """
-Bazos.sk Web Scraper
+Bazos.sk Web Scraper - CORRECTED VERSION (Based on Real HTML)
 Scrapes classifieds listings from bazos.sk with descriptions and images
 """
 
@@ -9,6 +9,7 @@ from urllib.parse import urljoin
 from typing import List, Dict, Optional
 import json
 from datetime import datetime
+import re
 
 
 class BazosItem:
@@ -169,96 +170,133 @@ class BazosScraper:
         soup = BeautifulSoup(html, "lxml")
         items = []
 
-        # Find all item containers - current structure on bazos.sk
-        # Items are in div with class containing "inzeraty" and "inzeratyflex"
+        # Find all item containers with class "inzeratyflex"
+        # NOTE: First item might be header (class="listainzerat inzeratyflex"), skip those
         item_containers = soup.find_all("div", class_="inzeratyflex")
 
-        if not item_containers:
-            # Try alternative: div with both classes
-            item_containers = soup.find_all("div", attrs={"class": lambda x: x and "inzeraty" in x and "flex" in x})
+        print(f"Found {len(item_containers)} containers with class 'inzeratyflex'")
 
-        if not item_containers:
-            # Fallback: try just inzeraty
-            item_containers = soup.find_all("div", class_="inzeraty")
+        for i, container in enumerate(item_containers):
+            # Skip header row (has class "listainzerat")
+            if "listainzerat" in container.get("class", []):
+                print(f"  Skipping header row (index {i})")
+                continue
 
-        if not item_containers:
-            # Try alternative selectors for older versions
-            item_containers = soup.find_all("div", class_="inzeratMain")
-
-        for container in item_containers:
             try:
                 item = self._extract_item(container, category)
                 if item:
                     items.append(item)
             except Exception as e:
-                print(f"Error parsing item: {e}")
+                print(f"Error parsing item {i}: {e}")
                 continue
 
         return items
 
     def _extract_item(self, container, category: str) -> Optional[BazosItem]:
-        """Extract item details from a container"""
+        """Extract item details from a container - ACTUAL HTML STRUCTURE"""
 
         try:
-            # Extract title and URL
-            title_link = container.find("a", class_="nadpis")
-            if not title_link:
-                # Try alternative
-                title_link = container.find("a")
+            # ========== TITLE EXTRACTION ==========
+            # Title is in <h2 class="nadpis"> inside inzeratynadpis div
+            title_elem = container.find("h2", class_="nadpis")
+            if not title_elem:
+                # Fallback: look for any h2
+                title_elem = container.find("h2")
 
-            if not title_link:
+            if not title_elem:
+                # Last fallback: look for link in nadpis area
+                nadpis_div = container.find("div", class_="inzeratynadpis")
+                if nadpis_div:
+                    title_elem = nadpis_div.find("a")
+
+            if not title_elem:
                 return None
 
-            title = title_link.get_text(strip=True)
-            item_url = title_link.get("href", "")
+            title = title_elem.get_text(strip=True)
+            if not title:
+                return None
 
-            if not item_url.startswith("http"):
-                item_url = f"https://{category}.bazos.sk/{item_url}"
+            # Extract URL - look for link with href
+            item_url = ""
+            link = container.find("a", href=True)
+            if link:
+                item_url = link.get("href", "")
 
-            # Extract image
+            if not item_url:
+                return None
+
+            # ========== IMAGE EXTRACTION ==========
             image_url = None
-            img_tag = container.find("img")
+            img_tag = container.find("img", class_="obrazek")
+            if not img_tag:
+                img_tag = container.find("img")
+
             if img_tag:
                 image_url = img_tag.get("src", "")
-                if image_url and not image_url.startswith("http"):
-                    image_url = f"https://bazos.sk{image_url}"
+                if image_url:
+                    # Handle relative URLs
+                    if image_url.startswith("./"):
+                        # Local file reference - skip these
+                        image_url = None
+                    elif image_url.startswith("/"):
+                        image_url = f"https://bazos.sk{image_url}"
+                    elif not image_url.startswith("http"):
+                        image_url = f"https://bazos.sk/{image_url}"
 
-            # Extract description
-            description_elem = container.find("div", class_="popis")
-            if not description_elem:
-                description_elem = container.find("span", class_="popis")
-
+            # ========== DESCRIPTION EXTRACTION ==========
             description = ""
+            description_elem = container.find("div", class_="popis")
             if description_elem:
                 description = description_elem.get_text(strip=True)
 
-            # Extract price
+            # ========== PRICE EXTRACTION ==========
+            # Price is in <div class="inzeratycena"><b><span>price</span></b></div>
             price = None
-            price_elem = container.find("span", class_="cena")
-            if not price_elem:
-                price_elem = container.find("b")
-
+            price_elem = container.find("div", class_="inzeratycena")
             if price_elem:
-                price = price_elem.get_text(strip=True)
+                # Get all text content
+                price_text = price_elem.get_text(strip=True)
+                # Extract only the numeric part with currency
+                # Pattern: "250 €" or "250€"
+                price_match = re.search(r'(\d+(?:\s*\d{3})*(?:[,\.]\d+)?)\s*€', price_text)
+                if price_match:
+                    # Get original format from text
+                    price = price_match.group(0).strip()
+                elif price_text and any(c.isdigit() for c in price_text):
+                    price = price_text
+                else:
+                    price = None
 
-            # Extract location
+            # ========== LOCATION EXTRACTION ==========
+            # Location is in <div class="inzeratylok">Komárno<br/>946 03</div>
             location = None
-            location_elem = container.find("span", class_="lokality")
-            if not location_elem:
-                # Try to find location in text
-                text_content = container.get_text()
-                if "lokalita" in text_content.lower():
-                    parts = text_content.split("lokalita")
-                    if len(parts) > 1:
-                        location = parts[1].split("\n")[0].strip()
-            else:
-                location = location_elem.get_text(strip=True)
+            location_elem = container.find("div", class_="inzeratylok")
+            if location_elem:
+                # Get text and clean up line breaks
+                loc_text = location_elem.get_text(strip=True)
+                # Remove extra whitespace
+                location = " ".join(loc_text.split())
+                location = location.strip() if location else None
 
-            # Extract date
+            # ========== DATE EXTRACTION ==========
+            # Date is in <span class="velikost10"> with format like "- [4.9. 2026]" or "- TOP - [4.9. 2026]"
             date_posted = None
-            date_elem = container.find("span", class_="datum")
-            if date_elem:
-                date_posted = date_elem.get_text(strip=True)
+
+            # Try to find date span
+            date_span = container.find("span", class_="velikost10")
+            if date_span:
+                date_text = date_span.get_text(strip=True)
+                # Extract date pattern [d.m. year]
+                date_match = re.search(r'\[(\d+\.\d+\.\s*\d{4})\]', date_text)
+                if date_match:
+                    date_posted = date_match.group(1)
+
+            # Fallback: search for date pattern anywhere in container
+            if not date_posted:
+                container_text = container.get_text()
+                date_match = re.search(r'\[(\d+\.\d+\.\s*\d{4})\]', container_text)
+                if date_match:
+                    date_posted = date_match.group(1)
 
             return BazosItem(
                 title=title,
