@@ -133,21 +133,16 @@ class BazosScraper:
             List of BazosItem objects
         """
         items = []
+        url = self.build_url(
+            category=category,
+            keyword=keyword,
+            price_from=price_from,
+            price_to=price_to,
+            radius=radius,
+            location=location,
+        )
 
         for page in range(max_pages):
-            url = self.build_url(
-                category=category,
-                keyword=keyword,
-                price_from=price_from,
-                price_to=price_to,
-                radius=radius,
-                location=location,
-            )
-
-            # Add page parameter if not first page
-            if page > 0:
-                url += f"&page={page}"
-
             print(f"Scraping page {page + 1}: {url}")
 
             try:
@@ -159,11 +154,94 @@ class BazosScraper:
 
                 print(f"Found {len(page_items)} items on page {page + 1}")
 
+                # For subsequent pages, extract next page parameters from pagination
+                if page < max_pages - 1:
+                    next_params = self._get_next_page_url(response.text)
+                    if next_params:
+                        # next_params is like "&kitx=ne&crp=20"
+                        # Build new URL: remove kitx=ano and add new params
+                        base_url = url.split("&kitx=")[0] if "&kitx=" in url else url
+                        url = base_url + next_params
+                        print(f"  Next page URL: {url}")
+                    else:
+                        print(f"No next page found, stopping pagination")
+                        break
+
             except requests.RequestException as e:
                 print(f"Error scraping page {page + 1}: {e}")
                 continue
 
         return items
+
+    def _get_next_page_url(self, html: str) -> Optional[str]:
+        """
+        Extract the next page URL from pagination div.strankovani
+
+        Bazos.sk uses JavaScript-based pagination with onclick handlers on <span class="paction"> elements.
+        Each span has an onclick that sets form fields:
+        - kitx='ne'
+        - crp={20, 40, 60, 80, ...} (page offset)
+
+        Args:
+            html: HTML content of the page
+
+        Returns:
+            Next page URL with correct parameters or None if no next page found
+        """
+        soup = BeautifulSoup(html, "lxml")
+
+        # Find the pagination div with class "strankovani"
+        pagination_div = soup.find("div", class_="strankovani")
+        if not pagination_div:
+            return None
+
+        # Find all span elements with class "paction" (pagination action buttons)
+        paction_spans = pagination_div.find_all("span", class_="paction")
+
+        if not paction_spans:
+            return None
+
+        # Extract the "Ďalšia" (Next) button - it's usually the last paction span
+        # or look for one with text containing "ďalš"
+        next_span = None
+
+        # First, try to find the explicit "next" button
+        for span in paction_spans:
+            span_text = span.get_text(strip=True)
+            if "ďalš" in span_text.lower():
+                next_span = span
+                break
+
+        # If not found, use the last paction span (which should be next)
+        if not next_span and paction_spans:
+            next_span = paction_spans[-1]
+
+        if not next_span:
+            return None
+
+        # Extract the onclick attribute
+        onclick = next_span.get("onclick", "")
+        if not onclick:
+            return None
+
+        # Parse the crp value from onclick
+        # Pattern: document.getElementById('crp').value=20;
+        import re
+        crp_match = re.search(r"document\.getElementById\('crp'\)\.value=(\d+)", onclick)
+
+        if not crp_match:
+            return None
+
+        crp_value = crp_match.group(1)
+        print(f"  DEBUG: Found next page with crp={crp_value}")
+
+        # Build the next page URL by modifying the current URL
+        # We need to change kitx from 'ano' to 'ne' and add the crp parameter
+        # The URL format should be: ?hledat=nas&rubriky=pc&humkreis=25&kitx=ne&crp={value}
+
+        # For now, we'll return a modified URL with the new parameters
+        # The scraper will construct it properly with the current base parameters
+        return f"&kitx=ne&crp={crp_value}"
 
     def _parse_listings(self, html: str, category: str) -> List[BazosItem]:
         """Parse HTML and extract items"""
