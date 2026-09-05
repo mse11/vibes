@@ -2,65 +2,9 @@
 HTML Report generator and image downloader for Bazos scraper results
 """
 
-import os
-import requests
-from pathlib import Path
 from typing import List, Optional
 from datetime import datetime
 from .scraper import BazosItem
-
-
-class ImageDownloader:
-    """Download and manage images from listings"""
-
-    def __init__(self, output_dir: str = "bazos_images"):
-        self.output_dir = Path(output_dir)
-        self.output_dir.mkdir(parents=True, exist_ok=True)
-
-    def download_image(self, url: str, filename: str, timeout: int = 10) -> Optional[str]:
-        """
-        Download image from URL
-
-        Returns:
-            Local path to downloaded image or None if failed
-        """
-        if not url:
-            return None
-
-        try:
-            response = requests.get(url, timeout=timeout, allow_redirects=True)
-            response.raise_for_status()
-
-            file_path = self.output_dir / filename
-            with open(file_path, "wb") as f:
-                f.write(response.content)
-
-            return str(file_path)
-        except Exception as e:
-            print(f"Failed to download {url}: {e}")
-            return None
-
-    def download_all_images(self, items: List[BazosItem]) -> dict:
-        """
-        Download all images from items
-
-        Returns:
-            Dictionary mapping item URLs to local image paths
-        """
-        image_map = {}
-
-        for i, item in enumerate(items):
-            if item.image_url:
-                # Generate unique filename
-                ext = Path(item.image_url).suffix or ".jpg"
-                filename = f"item_{i:04d}{ext}"
-
-                local_path = self.download_image(item.image_url, filename)
-                if local_path:
-                    image_map[item.item_url] = local_path
-                    print(f"Downloaded image {i+1}/{len(items)}")
-
-        return image_map
 
 
 class HTMLReportGenerator:

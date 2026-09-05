@@ -240,37 +240,6 @@ def search(category, keyword, price_from, price_to, location, radius, pages_get,
 
 
 @cli.command()
-@click.option(
-    "--category",
-    default="pc",
-    help="Category for example (default: pc)",
-)
-@click.option(
-    "--keyword",
-    default="nas",
-    help="Keyword for example (default: nas)",
-)
-def example(category, keyword):
-    """
-    Run an example search to test the scraper
-    """
-    click.echo("🔍 Running example search...\n")
-    scraper = BazosScraper()
-
-    url = scraper.build_url(category=category, keyword=keyword)
-    click.echo(f"Search URL: {url}\n")
-
-    items = scraper.scrape_listings(category=category, keyword=keyword, max_pages=1)
-
-    click.echo(f"Found {len(items)} items:\n")
-    for i, item in enumerate(items[:3], 1):
-        click.echo(f"{i}. {item.title}")
-        click.echo(f"   Price: {item.price}")
-        click.echo(f"   Location: {item.location}")
-        click.echo(f"   URL: {item.item_url}\n")
-
-
-@cli.command()
 def categories():
     """
     Show available categories fetched from bazos.sk
@@ -293,34 +262,6 @@ def categories():
     except Exception as e:
         click.echo(f"❌ Error fetching categories: {e}", err=True)
         raise SystemExit(1)
-
-
-@cli.command()
-def info():
-    """
-    Show project information
-    """
-    click.echo(click.style("🔍 Bazos.sk Web Scraper", bold=True, fg="cyan"))
-    click.echo("Version: 0.1.0\n")
-
-    click.echo(click.style("Features:", bold=True))
-    features = [
-        "Full search capability with filtering",
-        "Image extraction and downloading",
-        "Multiple export formats (JSON, CSV, HTML, Table)",
-        "Beautiful responsive HTML reports",
-        "Complete test suite with 35+ tests",
-    ]
-    for feature in features:
-        click.echo(f"  ✓ {feature}")
-
-    click.echo(f"\n{click.style('Usage:', bold=True)}")
-    click.echo("  scrape-bazos search --category pc --keyword 'nas'")
-    click.echo("  scrape-bazos example")
-    click.echo("  scrape-bazos categories")
-    click.echo(f"\n{click.style('Documentation:', bold=True)}")
-    click.echo("  See README.md for detailed documentation")
-    click.echo()
 
 
 def _save_as_csv(items, output_file: str) -> None:

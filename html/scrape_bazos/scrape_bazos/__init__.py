@@ -8,11 +8,10 @@ __author__ = "Michal Sestrienka"
 __email__ = "michal.sestrienka@gmail.com"
 
 from .scraper import BazosScraper, BazosItem
-from .reporter import HTMLReportGenerator, ImageDownloader
+from .reporter import HTMLReportGenerator
 
 __all__ = [
     "BazosScraper",
     "BazosItem",
     "HTMLReportGenerator",
-    "ImageDownloader",
 ]

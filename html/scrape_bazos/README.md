@@ -114,12 +114,6 @@ scrape-bazos search [OPTIONS]
 # Show available categories
 scrape-bazos categories
 
-# Run example search
-scrape-bazos example
-
-# Show project information
-scrape-bazos info
-
 # View detailed help
 scrape-bazos search --help
 ```
@@ -162,14 +156,9 @@ scrape-bazos search --topic elektronika --keyword "iphone" --pages 2 --display
 # Save as CSV
 scrape-bazos search --topic pc --keyword "monitor" --format csv --output monitors.csv
 
-# Quick example search
-scrape-bazos example
-
 # View all available categories
 scrape-bazos categories
 
-# Show project information
-scrape-bazos info
 ```
 
 ## URL Structure
