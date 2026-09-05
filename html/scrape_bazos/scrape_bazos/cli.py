@@ -54,10 +54,10 @@ def cli():
     help="Search radius in km (default: 25)",
 )
 @click.option(
-    "--pages",
-    default=1,
-    type=int,
-    help="Number of pages to scrape (default: 1)",
+    "--pages-get",
+    default="1",
+    type=str,
+    help="Number of pages to scrape or 'all' (default: 1)",
 )
 @click.option(
     "--output",
@@ -82,17 +82,26 @@ def cli():
     is_flag=True,
     help="Display results in console",
 )
-def search(category, keyword, price_from, price_to, location, radius, pages, output, format, timeout, display):
+@click.option(
+    "--pages-count",
+    is_flag=True,
+    help="Only count available pages without scraping",
+)
+def search(category, keyword, price_from, price_to, location, radius, pages_get, output, format, timeout, display, pages_count):
     """
     Search for listings on bazos.sk
 
     Examples:
 
-        scrape-bazos search --category pc --keyword "nas"
+        scrape-bazos search --category pc --keyword "nas" --pages-count
+
+        scrape-bazos search --category pc --keyword "nas" --pages-get 2
+
+        scrape-bazos search --category pc --keyword "nas" --pages-get all
 
         scrape-bazos search --category pc --keyword "notebook" --price-from 500 --price-to 1000
 
-        scrape-bazos search --category auto --keyword "skoda" --price-to 15000 --pages 3
+        scrape-bazos search --category auto --keyword "skoda" --price-to 15000 --pages-get 3
 
         scrape-bazos search --category reality --keyword "byt" --location "Bratislava" --radius 10
     """
@@ -111,8 +120,54 @@ def search(category, keyword, price_from, price_to, location, radius, pages, out
         )
         click.echo(f"🔍 Search URL: {url}\n")
 
+        # If only counting pages, fetch first page and show page info
+        if pages_count:
+            click.echo("📊 Checking available pages...")
+            page_info = scraper.get_page_count(
+                category=category,
+                keyword=keyword,
+                price_from=price_from,
+                price_to=price_to,
+                radius=radius,
+                location=location,
+            )
+
+            if page_info:
+                click.echo(f"\n📄 Page Information:")
+                click.echo(f"   Total pages: {page_info['total_pages']}")
+                click.echo(f"   Total items: {page_info['total_items']}\n")
+            else:
+                click.echo("❌ Could not retrieve page information")
+
+            raise SystemExit(0)
+
+        # Handle pages_get parameter - can be "all" or a number
+        if pages_get.lower() == "all":
+            click.echo("📊 Detecting total pages...")
+            page_info = scraper.get_page_count(
+                category=category,
+                keyword=keyword,
+                price_from=price_from,
+                price_to=price_to,
+                radius=radius,
+                location=location,
+            )
+
+            if page_info:
+                pages_get_int = page_info['total_pages']
+                click.echo(f"Found {pages_get_int} pages total\n")
+            else:
+                click.echo("❌ Could not detect total pages, defaulting to 1 page")
+                pages_get_int = 1
+        else:
+            try:
+                pages_get_int = int(pages_get)
+            except ValueError:
+                click.echo(f"❌ Invalid value for --pages-get: '{pages_get}' (use a number or 'all')", err=True)
+                raise SystemExit(1)
+
         # Scrape listings
-        click.echo(f"📡 Scraping {pages} page(s)...")
+        click.echo(f"📡 Scraping {pages_get_int} page(s)...")
         items = scraper.scrape_listings(
             category=category,
             keyword=keyword,
@@ -120,7 +175,7 @@ def search(category, keyword, price_from, price_to, location, radius, pages, out
             price_to=price_to,
             radius=radius,
             location=location,
-            max_pages=pages,
+            max_pages=pages_get_int,
         )
 
         click.echo(f"\n✅ Found {len(items)} items\n")

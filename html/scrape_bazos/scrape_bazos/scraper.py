@@ -156,12 +156,21 @@ class BazosScraper:
 
                 # For subsequent pages, extract next page parameters from pagination
                 if page < max_pages - 1:
-                    next_params = self._get_next_page_url(response.text)
-                    if next_params:
-                        # next_params is like "&kitx=ne&crp=20"
-                        # Build new URL: remove kitx=ano and add new params
-                        base_url = url.split("&kitx=")[0] if "&kitx=" in url else url
-                        url = base_url + next_params
+                    next_page = self._get_next_page_url_v2(response.text)
+                    if next_page:
+                        # next_page can be two types:
+                        # 1. "&kitx=ne&crp=20" (from page 1 style pagination)
+                        # 2. "/40/?hledat=nas&..." (from page 2+ style pagination)
+
+                        if next_page.startswith("/"):
+                            # Page 2+ style: relative URL with path prefix
+                            topic = category.lower()
+                            url = f"https://{topic}.bazos.sk{next_page}"
+                        else:
+                            # Page 1 style: query parameters only
+                            base_url = url.split("&kitx=")[0] if "&kitx=" in url else url
+                            url = base_url + next_page
+
                         print(f"  Next page URL: {url}")
                     else:
                         print(f"No next page found, stopping pagination")
@@ -193,12 +202,17 @@ class BazosScraper:
         # Find the pagination div with class "strankovani"
         pagination_div = soup.find("div", class_="strankovani")
         if not pagination_div:
+            print("  DEBUG: No pagination div found")
             return None
+
+        print(f"  DEBUG: Pagination HTML: {pagination_div}")
 
         # Find all span elements with class "paction" (pagination action buttons)
         paction_spans = pagination_div.find_all("span", class_="paction")
+        print(f"  DEBUG: Found {len(paction_spans)} paction spans")
 
         if not paction_spans:
+            print("  DEBUG: No paction spans found")
             return None
 
         # Extract the "Ďalšia" (Next) button - it's usually the last paction span
@@ -206,23 +220,32 @@ class BazosScraper:
         next_span = None
 
         # First, try to find the explicit "next" button
-        for span in paction_spans:
+        for i, span in enumerate(paction_spans):
             span_text = span.get_text(strip=True)
+            onclick = span.get("onclick", "")
+            print(f"    paction[{i}]: text='{span_text}' has_onclick={bool(onclick)}")
+
             if "ďalš" in span_text.lower():
                 next_span = span
+                print(f"  DEBUG: Found 'next' button at index {i}")
                 break
 
         # If not found, use the last paction span (which should be next)
         if not next_span and paction_spans:
             next_span = paction_spans[-1]
+            print(f"  DEBUG: Using last paction span as next")
 
         if not next_span:
+            print("  DEBUG: No next_span selected")
             return None
 
         # Extract the onclick attribute
         onclick = next_span.get("onclick", "")
         if not onclick:
+            print("  DEBUG: No onclick attribute found on next_span")
             return None
+
+        print(f"  DEBUG: onclick='{onclick}'")
 
         # Parse the crp value from onclick
         # Pattern: document.getElementById('crp').value=20;
@@ -230,6 +253,7 @@ class BazosScraper:
         crp_match = re.search(r"document\.getElementById\('crp'\)\.value=(\d+)", onclick)
 
         if not crp_match:
+            print("  DEBUG: Could not extract crp value from onclick")
             return None
 
         crp_value = crp_match.group(1)
@@ -242,6 +266,156 @@ class BazosScraper:
         # For now, we'll return a modified URL with the new parameters
         # The scraper will construct it properly with the current base parameters
         return f"&kitx=ne&crp={crp_value}"
+
+    def _get_next_page_url_v2(self, html: str) -> Optional[str]:
+        """
+        Extract the next page URL from pagination div.strankovani
+
+        Bazos.sk uses TWO different pagination structures:
+
+        Page 1: Uses <span class="paction"> with onclick handlers
+        Page 2+: Uses regular <a> tags with href attributes
+
+        Both have a "Ďalšia" (Next) button that we need to extract.
+
+        Args:
+            html: HTML content of the page
+
+        Returns:
+            Next page URL or None if no next page found
+        """
+        soup = BeautifulSoup(html, "lxml")
+
+        # Find the pagination div with class "strankovani"
+        pagination_div = soup.find("div", class_="strankovani")
+        if not pagination_div:
+            return None
+
+        # FIRST TRY: Look for <span class="paction"> with onclick (Page 1 style)
+        paction_spans = pagination_div.find_all("span", class_="paction")
+
+        if paction_spans:
+            print("  DEBUG: Using paction span pagination (Page 1 style)")
+            # Find the "Ďalšia" button
+            for span in paction_spans:
+                span_text = span.get_text(strip=True)
+                if "ďalš" in span_text.lower():
+                    onclick = span.get("onclick", "")
+                    if onclick:
+                        # Parse the crp value from onclick
+                        import re
+                        crp_match = re.search(r"document\.getElementById\('crp'\)\.value=(\d+)", onclick)
+                        if crp_match:
+                            crp_value = crp_match.group(1)
+                            print(f"  DEBUG: Found next page with crp={crp_value}")
+                            return f"&kitx=ne&crp={crp_value}"
+
+        # SECOND TRY: Look for regular <a> tags with href (Page 2+ style)
+        links = pagination_div.find_all("a", href=True)
+
+        if links:
+            print("  DEBUG: Using <a> tag pagination (Page 2+ style)")
+            # Find the "Ďalšia" button
+            for link in links:
+                link_text = link.get_text(strip=True)
+                if "ďalš" in link_text.lower():
+                    href = link.get("href", "")
+                    if href:
+                        print(f"  DEBUG: Found next page with href={href}")
+                        # Return the href as-is (it's a relative URL like /40/?...)
+                        # We'll need to convert it to include the query parameters
+                        return href
+
+        print("  DEBUG: No next page found")
+        return None
+
+    def get_page_count(
+        self,
+        category: str,
+        keyword: str,
+        price_from: Optional[str] = None,
+        price_to: Optional[str] = None,
+        radius: int = 25,
+        location: str = "",
+    ) -> Optional[Dict]:
+        """
+        Get page count information by traversing all pages
+
+        Args:
+            category: Category
+            keyword: Search keyword
+            price_from: Minimum price
+            price_to: Maximum price
+            radius: Search radius
+            location: Specific location
+
+        Returns:
+            Dictionary with page info or None if error
+        """
+        try:
+            url = self.build_url(
+                category=category,
+                keyword=keyword,
+                price_from=price_from,
+                price_to=price_to,
+                radius=radius,
+                location=location,
+            )
+
+            print(f"Traversing pages to find total count...")
+            total_pages = 1
+            total_items = 0
+            current_url = url
+
+            while True:
+                print(f"  Checking page {total_pages}...")
+                response = self.session.get(current_url, timeout=self.timeout)
+                response.raise_for_status()
+
+                soup = BeautifulSoup(response.text, "lxml")
+
+                # Count items on THIS page
+                item_containers = soup.find_all("div", class_="inzeratyflex")
+                items_on_page = len([c for c in item_containers if "listainzerat" not in c.get("class", [])])
+                total_items += items_on_page
+                print(f"    Page {total_pages}: {items_on_page} items (total so far: {total_items})")
+
+                # Find pagination div
+                pagination_div = soup.find("div", class_="strankovani")
+                if not pagination_div:
+                    break
+
+                # Check if there's a next page
+                next_page_url = self._get_next_page_url_v2(soup.decode())
+
+                if not next_page_url:
+                    # No next page found, we've reached the end
+                    break
+
+                # Prepare URL for next page
+                if next_page_url.startswith("/"):
+                    # Page 2+ style: relative URL with path prefix
+                    topic = category.lower()
+                    current_url = f"https://{topic}.bazos.sk{next_page_url}"
+                else:
+                    # Page 1 style: query parameters only
+                    base_url = current_url.split("&kitx=")[0] if "&kitx=" in current_url else current_url
+                    current_url = base_url + next_page_url
+
+                total_pages += 1
+
+                # Safety limit to prevent infinite loops
+                if total_pages > 1000:
+                    break
+
+            return {
+                "total_pages": total_pages,
+                "total_items": total_items,
+            }
+
+        except Exception as e:
+            print(f"Error getting page count: {e}")
+            return None
 
     def _parse_listings(self, html: str, category: str) -> List[BazosItem]:
         """Parse HTML and extract items"""
