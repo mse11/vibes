@@ -12,6 +12,35 @@ from datetime import datetime
 import re
 
 
+class BazosItemDetails:
+    """Represents detailed information fetched from an item's detail page"""
+
+    def __init__(
+        self,
+        image_urls: Optional[List[str]] = None,
+        full_description: Optional[str] = None,
+    ):
+        """
+        Initialize BazosItemDetails
+
+        Args:
+            image_urls: List of all carousel image URLs
+            full_description: Complete description from detail page
+        """
+        self.image_urls = image_urls or []
+        self.full_description = full_description
+
+    def to_dict(self) -> Dict:
+        """Convert to dictionary"""
+        return {
+            "image_urls": self.image_urls,
+            "full_description": self.full_description,
+        }
+
+    def __repr__(self) -> str:
+        return f"BazosItemDetails(images={len(self.image_urls)}, desc_len={len(self.full_description) if self.full_description else 0})"
+
+
 class BazosItem:
     """Represents a single item from bazos.sk"""
 
@@ -24,6 +53,8 @@ class BazosItem:
         image_url: Optional[str],
         item_url: str,
         date_posted: Optional[str] = None,
+        item_details: Optional[BazosItemDetails] = None,
+        category: Optional[str] = None,
     ):
         self.title = title
         self.price = price
@@ -32,6 +63,18 @@ class BazosItem:
         self.image_url = image_url
         self.item_url = item_url
         self.date_posted = date_posted
+        self.item_details = item_details or BazosItemDetails()
+        self.category = category  # Store category for detail page fetching
+
+    @property
+    def image_urls(self) -> List[str]:
+        """Get all image URLs from details"""
+        return self.item_details.image_urls if self.item_details else []
+
+    @property
+    def full_description(self) -> Optional[str]:
+        """Get full description from details"""
+        return self.item_details.full_description if self.item_details else None
 
     def to_dict(self) -> Dict:
         """Convert to dictionary"""
@@ -43,6 +86,8 @@ class BazosItem:
             "image_url": self.image_url,
             "item_url": self.item_url,
             "date_posted": self.date_posted,
+            "category": self.category,
+            "item_details": self.item_details.to_dict() if self.item_details else None,
         }
 
     def __repr__(self) -> str:
@@ -558,11 +603,148 @@ class BazosScraper:
                 image_url=image_url,
                 item_url=item_url,
                 date_posted=date_posted,
+                category=category,
             )
 
         except Exception as e:
             print(f"Error extracting item details: {e}")
             return None
+
+    def fetch_item_details(self, item: BazosItem) -> BazosItem:
+        """
+        Fetch detailed information from the item's detail page.
+        Extracts all carousel images and full description.
+
+        Args:
+            item: BazosItem to enrich with details
+
+        Returns:
+            Updated BazosItem with item_details populated
+        """
+        try:
+            # Construct proper URL
+            url = item.item_url
+
+            # If URL is relative, build absolute URL with category subdomain
+            if not url.startswith("http"):
+                # Use category subdomain if available, otherwise default to www
+                category = item.category.lower() if item.category else "www"
+                url = f"https://{category}.bazos.sk{url}"
+
+            # Try to fetch the page
+            response = self.session.get(url, timeout=self.timeout)
+            response.raise_for_status()
+
+            soup = BeautifulSoup(response.text, "lxml")
+
+            # ========== EXTRACT ALL CAROUSEL IMAGES ==========
+            image_urls = []
+
+            # METHOD 1: Look for carousel cells with images (primary method)
+            carousel_cells = soup.find_all("div", class_="carousel-cell")
+            if carousel_cells:
+                for cell in carousel_cells:
+                    img = cell.find("img", class_="carousel-cell-image")
+                    if img:
+                        # Try src first, then data-src for lazy-loaded images
+                        img_src = img.get("src") or img.get("data-src")
+                        if img_src:
+                            # Normalize URL
+                            if img_src.startswith("http"):
+                                if img_src not in image_urls:
+                                    image_urls.append(img_src)
+                            elif img_src.startswith("/"):
+                                full_url = f"https://www.bazos.sk{img_src}"
+                                if full_url not in image_urls:
+                                    image_urls.append(full_url)
+
+            # METHOD 2: ALWAYS look for flinavigace (thumbnail gallery) - extracts ALL images
+            # NOTE: This runs regardless of METHOD 1 results to ensure we get all available images
+            flinavigace_div = soup.find("div", class_="flinavigace")
+            if flinavigace_div:
+                thumbnails = flinavigace_div.find_all("img", class_="obrazekflithumb")
+                if thumbnails:
+                    print(f"    Found {len(thumbnails)} thumbnails in flinavigace gallery")
+                    for thumb in thumbnails:
+                        # Extract thumbnail URL
+                        thumb_src = thumb.get("src") or thumb.get("data-src")
+                        if thumb_src:
+                            # Convert thumbnail URL (img/Nt/) to full-size (img/N/)
+                            # Pattern: /img/1t/763/195144763.jpg → /img/1/763/195144763.jpg
+                            # Replace pattern like "1t/" with "1/"
+                            import re as regex_module
+                            img_src = regex_module.sub(r'/img/(\d+)t/', r'/img/\1/', thumb_src)
+
+                            if img_src.startswith("http"):
+                                if img_src not in image_urls:
+                                    image_urls.append(img_src)
+                                    print(f"      Added: {img_src}")
+                            elif img_src.startswith("/"):
+                                full_url = f"https://www.bazos.sk{img_src}"
+                                if full_url not in image_urls:
+                                    image_urls.append(full_url)
+                                    print(f"      Added: {full_url}")
+
+            # METHOD 3: Fallback - look for all img tags with src containing bazos
+            if not image_urls:
+                all_imgs = soup.find_all("img", src=True)
+                for img in all_imgs:
+                    src = img.get("src") or img.get("data-src")
+                    # Filter to actual product images (from bazos.sk or www.bazos.sk)
+                    if src and "bazos.sk" in src and ".jpg" in src.lower():
+                        if src not in image_urls:  # Avoid duplicates
+                            if src.startswith("http"):
+                                image_urls.append(src)
+                            elif src.startswith("/"):
+                                full_url = f"https://www.bazos.sk{src}"
+                                if full_url not in image_urls:
+                                    image_urls.append(full_url)
+
+            if image_urls and not item.image_url:
+                # Update primary image if not set
+                item.image_url = image_urls[0]
+
+            # ========== EXTRACT FULL DESCRIPTION ==========
+            # Look for detailed description in div.popisdetail or similar
+            full_desc_parts = []
+
+            # Try to find popisdetail div
+            desc_div = soup.find("div", class_="popisdetail")
+            if desc_div:
+                # Get all text, preserving structure with line breaks
+                for elem in desc_div.find_all(["p", "br", "div"]):
+                    text = elem.get_text(strip=True)
+                    if text:
+                        full_desc_parts.append(text)
+
+            # Fallback: look for any div with detailed content
+            if not full_desc_parts:
+                main_content = soup.find("div", class_="maincontent")
+                if main_content:
+                    # Get description before other elements
+                    desc_text = main_content.get_text(strip=True)
+                    if desc_text:
+                        full_desc_parts.append(desc_text)
+
+            full_description = "\n".join(full_desc_parts) if full_desc_parts else item.description
+
+            # ========== CREATE ITEM_DETAILS OBJECT ==========
+            item.item_details = BazosItemDetails(
+                image_urls=image_urls,
+                full_description=full_description,
+            )
+
+            print(f"  ✓ Fetched details for: {item.title[:50]}...")
+            print(f"    - Found {len(image_urls)} image(s)")
+            print(f"    - Full description length: {len(full_description) if full_description else 0} chars")
+
+            return item
+
+        except Exception as e:
+            print(f"  ⚠ Error fetching details for {item.item_url}: {e}")
+            # Return item with empty details
+            item.item_details = BazosItemDetails()
+            return item
 
     def get_categories(self) -> Dict[str, str]:
         """

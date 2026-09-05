@@ -87,7 +87,12 @@ def cli():
     is_flag=True,
     help="Only count available pages without scraping",
 )
-def search(category, keyword, price_from, price_to, location, radius, pages_get, output, format, timeout, display, pages_count):
+@click.option(
+    "--details-all",
+    is_flag=True,
+    help="Fetch detailed information from each item page (images carousel, full descriptions)",
+)
+def search(category, keyword, price_from, price_to, location, radius, pages_get, output, format, timeout, display, pages_count, details_all):
     """
     Search for listings on bazos.sk
 
@@ -104,6 +109,10 @@ def search(category, keyword, price_from, price_to, location, radius, pages_get,
         scrape-bazos search --category auto --keyword "skoda" --price-to 15000 --pages-get 3
 
         scrape-bazos search --category reality --keyword "byt" --location "Bratislava" --radius 10
+
+        scrape-bazos search --category pc --keyword "nas" --pages-get 2 --details-all
+
+        scrape-bazos search --category pc --keyword "nas" --details-all --display
     """
     try:
         # Create scraper
@@ -180,6 +189,15 @@ def search(category, keyword, price_from, price_to, location, radius, pages_get,
 
         click.echo(f"\n✅ Found {len(items)} items\n")
 
+        # Fetch detailed information if requested
+        if details_all:
+            click.echo("📋 Fetching detailed information for all items...")
+            for i, item in enumerate(items, 1):
+                click.echo(f"  [{i}/{len(items)}] {item.title[:60]}...", nl=False)
+                click.echo("\r", nl=False)
+                scraper.fetch_item_details(item)
+            click.echo("\n✅ Details fetched for all items\n")
+
         # Display in console if requested
         if display:
             for i, item in enumerate(items, 1):
@@ -192,7 +210,15 @@ def search(category, keyword, price_from, price_to, location, radius, pages_get,
                 click.echo(f"URL:         {item.item_url}")
                 if item.image_url:
                     click.echo(f"Image:       {item.image_url}")
+                if item.image_urls and details_all:
+                    click.echo(f"All Images:  {len(item.image_urls)} found")
+                    for j, img_url in enumerate(item.image_urls[:5], 1):
+                        click.echo(f"  [{j}] {img_url}")
+                    if len(item.image_urls) > 5:
+                        click.echo(f"  ... and {len(item.image_urls) - 5} more")
                 click.echo(f"\nDescription:\n{item.description}\n")
+                if item.full_description and details_all and item.full_description != item.description:
+                    click.echo(f"Full Description:\n{item.full_description}\n")
 
         # Save results
         if format == "json":
@@ -303,12 +329,33 @@ def _save_as_csv(items, output_file: str) -> None:
         if not items:
             return
 
-        fieldnames = ["title", "price", "location", "description", "image_url", "item_url", "date_posted"]
+        fieldnames = [
+            "title",
+            "price",
+            "location",
+            "description",
+            "image_url",
+            "image_urls",
+            "full_description",
+            "item_url",
+            "date_posted",
+        ]
         writer = csv.DictWriter(f, fieldnames=fieldnames)
 
         writer.writeheader()
         for item in items:
-            writer.writerow(item.to_dict())
+            row = {
+                "title": item.title,
+                "price": item.price,
+                "location": item.location,
+                "description": item.description,
+                "image_url": item.image_url,
+                "image_urls": json.dumps(item.image_urls) if item.image_urls else "",
+                "full_description": item.full_description or "",
+                "item_url": item.item_url,
+                "date_posted": item.date_posted,
+            }
+            writer.writerow(row)
 
 
 def _save_as_table(items, output_file: str) -> None:
@@ -327,7 +374,13 @@ def _save_as_table(items, output_file: str) -> None:
             f.write(f"URL:         {item.item_url}\n")
             if item.image_url:
                 f.write(f"Image:       {item.image_url}\n")
+            if item.image_urls:
+                f.write(f"\nAll Images ({len(item.image_urls)} total):\n")
+                for j, img_url in enumerate(item.image_urls, 1):
+                    f.write(f"  [{j}] {img_url}\n")
             f.write(f"\nDescription:\n{item.description}\n")
+            if item.full_description and item.full_description != item.description:
+                f.write(f"\nFull Description:\n{item.full_description}\n")
 
         f.write("\n" + "=" * 150 + "\n")
         f.write(f"Total items: {len(items)}\n")
