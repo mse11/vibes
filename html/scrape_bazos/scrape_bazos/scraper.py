@@ -19,6 +19,7 @@ class BazosItemDetails:
         self,
         image_urls: Optional[List[str]] = None,
         full_description: Optional[str] = None,
+        full_url: Optional[str] = None,
     ):
         """
         Initialize BazosItemDetails
@@ -26,19 +27,22 @@ class BazosItemDetails:
         Args:
             image_urls: List of all carousel image URLs
             full_description: Complete description from detail page
+            full_url: Full URL of the item detail page
         """
         self.image_urls = image_urls or []
         self.full_description = full_description
+        self.full_url = full_url
 
     def to_dict(self) -> Dict:
         """Convert to dictionary"""
         return {
             "image_urls": self.image_urls,
             "full_description": self.full_description,
+            "full_url": self.full_url,
         }
 
     def __repr__(self) -> str:
-        return f"BazosItemDetails(images={len(self.image_urls)}, desc_len={len(self.full_description) if self.full_description else 0})"
+        return f"BazosItemDetails(images={len(self.image_urls)}, desc_len={len(self.full_description) if self.full_description else 0}, url={self.full_url})"
 
 
 class BazosItem:
@@ -732,6 +736,7 @@ class BazosScraper:
             item.item_details = BazosItemDetails(
                 image_urls=image_urls,
                 full_description=full_description,
+                full_url=item.item_url,
             )
 
             print(f"  ✓ Fetched details for: {item.title[:50]}...")
@@ -742,8 +747,8 @@ class BazosScraper:
 
         except Exception as e:
             print(f"  ⚠ Error fetching details for {item.item_url}: {e}")
-            # Return item with empty details
-            item.item_details = BazosItemDetails()
+            # Return item with empty details but still store the URL
+            item.item_details = BazosItemDetails(full_url=item.item_url)
             return item
 
     def get_categories(self) -> Dict[str, str]:
