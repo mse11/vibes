@@ -7,68 +7,37 @@ import requests
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
 from typing import List, Dict, Optional
+from dataclasses import dataclass, field, asdict
 import json
 from datetime import datetime
 import re
 
 
+@dataclass
 class BazosItemDetails:
     """Represents detailed information fetched from an item's detail page"""
 
-    def __init__(
-        self,
-        image_urls: Optional[List[str]] = None,
-        full_description: Optional[str] = None,
-        full_url: Optional[str] = None,
-    ):
-        """
-        Initialize BazosItemDetails
-
-        Args:
-            image_urls: List of all carousel image URLs
-            full_description: Complete description from detail page
-            full_url: Full URL of the item detail page
-        """
-        self.image_urls = image_urls or []
-        self.full_description = full_description
-        self.full_url = full_url
-
-    def to_dict(self) -> Dict:
-        """Convert to dictionary"""
-        return {
-            "image_urls": self.image_urls,
-            "full_description": self.full_description,
-            "full_url": self.full_url,
-        }
+    full_url: Optional[str] = None
+    image_urls: List[str] = field(default_factory=list)
+    full_description: Optional[str] = None
 
     def __repr__(self) -> str:
         return f"BazosItemDetails(images={len(self.image_urls)}, desc_len={len(self.full_description) if self.full_description else 0}, url={self.full_url})"
 
 
+@dataclass
 class BazosItem:
     """Represents a single item from bazos.sk"""
 
-    def __init__(
-        self,
-        title: str,
-        price: Optional[str],
-        location: Optional[str],
-        description: str,
-        image_url: Optional[str],
-        item_url: str,
-        date_posted: Optional[str] = None,
-        item_details: Optional[BazosItemDetails] = None,
-        category: Optional[str] = None,
-    ):
-        self.title = title
-        self.price = price
-        self.location = location
-        self.description = description
-        self.image_url = image_url
-        self.item_url = item_url
-        self.date_posted = date_posted
-        self.item_details = item_details or BazosItemDetails()
-        self.category = category  # Store category for detail page fetching
+    title: str
+    price: Optional[str]
+    location: Optional[str]
+    description: str
+    image_url: Optional[str]
+    item_url: str
+    date_posted: Optional[str] = None
+    item_details: BazosItemDetails = field(default_factory=BazosItemDetails)
+    category: Optional[str] = None
 
     @property
     def image_urls(self) -> List[str]:
@@ -79,20 +48,6 @@ class BazosItem:
     def full_description(self) -> Optional[str]:
         """Get full description from details"""
         return self.item_details.full_description if self.item_details else None
-
-    def to_dict(self) -> Dict:
-        """Convert to dictionary"""
-        return {
-            "title": self.title,
-            "price": self.price,
-            "location": self.location,
-            "description": self.description,
-            "image_url": self.image_url,
-            "item_url": self.item_url,
-            "date_posted": self.date_posted,
-            "category": self.category,
-            "item_details": self.item_details.to_dict() if self.item_details else None,
-        }
 
     def __repr__(self) -> str:
         return f"BazosItem(title={self.title!r}, price={self.price!r})"
@@ -736,7 +691,7 @@ class BazosScraper:
             item.item_details = BazosItemDetails(
                 image_urls=image_urls,
                 full_description=full_description,
-                full_url=item.item_url,
+                full_url=url,
             )
 
             print(f"  ✓ Fetched details for: {item.title[:50]}...")
@@ -747,8 +702,13 @@ class BazosScraper:
 
         except Exception as e:
             print(f"  ⚠ Error fetching details for {item.item_url}: {e}")
-            # Return item with empty details but still store the URL
-            item.item_details = BazosItemDetails(full_url=item.item_url)
+            # Return item with empty details but still store the full URL
+            # Reconstruct full URL in case of error
+            full_url = item.item_url
+            if not full_url.startswith("http"):
+                category = item.category.lower() if item.category else "www"
+                full_url = f"https://{category}.bazos.sk{full_url}"
+            item.item_details = BazosItemDetails(full_url=full_url)
             return item
 
     def get_categories(self) -> Dict[str, str]:
@@ -795,7 +755,7 @@ class BazosScraper:
         data = {
             "timestamp": datetime.now().isoformat(),
             "total_items": len(items),
-            "items": [item.to_dict() for item in items],
+            "items": [asdict(item) for item in items],
         }
 
         with open(output_file, "w", encoding="utf-8") as f:
