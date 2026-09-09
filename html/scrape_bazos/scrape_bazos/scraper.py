@@ -58,8 +58,10 @@ class BazosScraper:
 
     BASE_URL = "https://{topic}.bazos.sk/"
 
-    def __init__(self, timeout: int = 10):
+    def __init__(self, timeout: int = 10, max_retries: int = 3, retry_delay: float = 1.0):
         self.timeout = timeout
+        self.max_retries = max_retries
+        self.retry_delay = retry_delay
         self.session = requests.Session()
         self.session.headers.update({
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
@@ -341,6 +343,7 @@ class BazosScraper:
         price_to: Optional[str] = None,
         radius: int = 25,
         location: str = "",
+        retry: bool = True,
     ) -> Optional[Dict]:
         """
         Get page count information by traversing all pages
@@ -352,74 +355,106 @@ class BazosScraper:
             price_to: Maximum price
             radius: Search radius
             location: Specific location
+            retry: Whether to retry on failure (default: True)
 
         Returns:
-            Dictionary with page info or None if error
+            Dictionary with page info or None if error after all retries
         """
-        try:
-            url = self.build_url(
-                category=category,
-                keyword=keyword,
-                price_from=price_from,
-                price_to=price_to,
-                radius=radius,
-                location=location,
-            )
+        import time
 
-            print(f"Traversing pages to find total count...")
-            total_pages = 1
-            total_items = 0
-            current_url = url
+        url = self.build_url(
+            category=category,
+            keyword=keyword,
+            price_from=price_from,
+            price_to=price_to,
+            radius=radius,
+            location=location,
+        )
 
-            while True:
-                print(f"  Checking page {total_pages}...")
-                response = self.session.get(current_url, timeout=self.timeout)
-                response.raise_for_status()
+        print(f"Traversing pages to find total count...")
+        attempt = 0
+        last_error = None
 
-                soup = BeautifulSoup(response.text, "lxml")
+        while attempt < self.max_retries:
+            attempt += 1
+            try:
+                total_pages = 1
+                total_items = 0
+                current_url = url
 
-                # Count items on THIS page
-                item_containers = soup.find_all("div", class_="inzeratyflex")
-                items_on_page = len([c for c in item_containers if "listainzerat" not in c.get("class", [])])
-                total_items += items_on_page
-                print(f"    Page {total_pages}: {items_on_page} items (total so far: {total_items})")
+                while True:
+                    print(f"  Checking page {total_pages}...")
+                    response = self.session.get(current_url, timeout=self.timeout)
+                    response.raise_for_status()
 
-                # Find pagination div
-                pagination_div = soup.find("div", class_="strankovani")
-                if not pagination_div:
-                    break
+                    soup = BeautifulSoup(response.text, "lxml")
 
-                # Check if there's a next page
-                next_page_url = self._get_next_page_url_v2(soup.decode())
+                    # Count items on THIS page
+                    item_containers = soup.find_all("div", class_="inzeratyflex")
+                    items_on_page = len([c for c in item_containers if "listainzerat" not in c.get("class", [])])
+                    total_items += items_on_page
+                    print(f"    Page {total_pages}: {items_on_page} items (total so far: {total_items})")
 
-                if not next_page_url:
-                    # No next page found, we've reached the end
-                    break
+                    # Find pagination div
+                    pagination_div = soup.find("div", class_="strankovani")
+                    if not pagination_div:
+                        break
 
-                # Prepare URL for next page
-                if next_page_url.startswith("/"):
-                    # Page 2+ style: relative URL with path prefix
-                    topic = category.lower()
-                    current_url = f"https://{topic}.bazos.sk{next_page_url}"
+                    # Check if there's a next page
+                    next_page_url = self._get_next_page_url_v2(soup.decode())
+
+                    if not next_page_url:
+                        # No next page found, we've reached the end
+                        break
+
+                    # Prepare URL for next page
+                    if next_page_url.startswith("/"):
+                        # Page 2+ style: relative URL with path prefix
+                        topic = category.lower()
+                        current_url = f"https://{topic}.bazos.sk{next_page_url}"
+                    else:
+                        # Page 1 style: query parameters only
+                        base_url = current_url.split("&kitx=")[0] if "&kitx=" in current_url else current_url
+                        current_url = base_url + next_page_url
+
+                    total_pages += 1
+
+                    # Safety limit to prevent infinite loops
+                    if total_pages > 1000:
+                        break
+
+                return {
+                    "total_pages": total_pages,
+                    "total_items": total_items,
+                }
+
+            except requests.exceptions.Timeout as e:
+                last_error = e
+                if retry and attempt < self.max_retries:
+                    wait_time = self.retry_delay * (2 ** (attempt - 1))  # Exponential backoff
+                    print(f"  ⚠️  Timeout on attempt {attempt}/{self.max_retries}: {e}")
+                    print(f"  ⏳ Retrying in {wait_time:.1f} seconds...")
+                    time.sleep(wait_time)
                 else:
-                    # Page 1 style: query parameters only
-                    base_url = current_url.split("&kitx=")[0] if "&kitx=" in current_url else current_url
-                    current_url = base_url + next_page_url
+                    print(f"  ❌ Timeout after {attempt} attempt(s): {e}")
+                    return None
 
-                total_pages += 1
+            except requests.exceptions.RequestException as e:
+                last_error = e
+                if retry and attempt < self.max_retries:
+                    wait_time = self.retry_delay * (2 ** (attempt - 1))  # Exponential backoff
+                    print(f"  ⚠️  Connection error on attempt {attempt}/{self.max_retries}: {e}")
+                    print(f"  ⏳ Retrying in {wait_time:.1f} seconds...")
+                    time.sleep(wait_time)
+                else:
+                    print(f"  ❌ Connection error after {attempt} attempt(s): {e}")
+                    return None
 
-                # Safety limit to prevent infinite loops
-                if total_pages > 1000:
-                    break
+            except Exception as e:
+                print(f"  ❌ Unexpected error getting page count: {e}")
+                return None
 
-            return {
-                "total_pages": total_pages,
-                "total_items": total_items,
-            }
-
-        except Exception as e:
-            print(f"Error getting page count: {e}")
-            return None
+        return None
 
     def _parse_listings(self, html: str, category: str) -> List[BazosItem]:
         """Parse HTML and extract items"""
@@ -784,7 +819,7 @@ def main():
         print(f"   URL: {item.item_url}")
 
     # Save to file
-    scraper.save_results(items, "bazos_results.json")
+    scraper.save_results(items, "bazos_results_pc_nas.json")
 
 
 if __name__ == "__main__":

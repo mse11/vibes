@@ -62,21 +62,33 @@ def cli():
 )
 @click.option(
     "--output",
-    default="bazos_results.json",
+    default="",
     type=str,
-    help="Output filename (default: bazos_results.json)",
+    help="Output filename (default: bazos_results_<category>_<keyword>.json)",
 )
 @click.option(
     "--format",
-    type=click.Choice(["json", "csv", "table", "html"]),
+    type=click.Choice(["json", "csv", "table", "html", "html_dynamic"]),
     default="json",
-    help="Output format (default: json)",
+    help="Output format (default: json). Use 'html_dynamic' for interactive filtering",
 )
 @click.option(
     "--timeout",
     default=10,
     type=int,
     help="Request timeout in seconds (default: 10)",
+)
+@click.option(
+    "--max-retries",
+    default=3,
+    type=int,
+    help="Maximum number of retries on connection errors (default: 3)",
+)
+@click.option(
+    "--retry-delay",
+    default=1.0,
+    type=float,
+    help="Initial delay between retries in seconds, uses exponential backoff (default: 1.0)",
 )
 @click.option(
     "--display",
@@ -114,7 +126,7 @@ def cli():
     is_flag=True,
     help="Truncate descriptions to 2 lines in HTML report (only applies to --format html)",
 )
-def search(category, keyword, price_from, price_to, location, radius, pages_get, output, format, timeout, display, pages_count, details_all, no_images, download_images, images_dir, truncate_descriptions):
+def search(category, keyword, price_from, price_to, location, radius, pages_get, output, format, timeout, max_retries, retry_delay, display, pages_count, details_all, no_images, download_images, images_dir, truncate_descriptions):
     """
     Search for listings on bazos.sk
 
@@ -136,11 +148,28 @@ def search(category, keyword, price_from, price_to, location, radius, pages_get,
     """
     try:
         # Validate HTML-specific options
-        if format != "html" and (no_images or download_images):
-            click.echo("⚠️  Note: --no-images and --download-images only apply to --format html", err=False)
+        if format not in ["html", "html_dynamic"] and (no_images or download_images):
+            click.echo("⚠️  Note: --no-images and --download-images only apply to --format html and html_dynamic", err=False)
+
+        # Auto-generate output filename if not provided
+        if not output or output == "bazos_results.json":
+            # Replace spaces with underscores in category and keyword for safe filenames
+            safe_category = category.replace(" ", "_")
+            safe_keyword = keyword.replace(" ", "_")
+
+            if format == "html":
+                output = f"bazos_report_{safe_category}_{safe_keyword}.html"
+            elif format == "html_dynamic":
+                output = f"bazos_report_dynamic_{safe_category}_{safe_keyword}.html"
+            elif format == "csv":
+                output = f"bazos_results_{safe_category}_{safe_keyword}.csv"
+            elif format == "table":
+                output = f"bazos_results_{safe_category}_{safe_keyword}.txt"
+            else:  # json
+                output = f"bazos_results_{safe_category}_{safe_keyword}.json"
 
         # Create scraper
-        scraper = BazosScraper(timeout=timeout)
+        scraper = BazosScraper(timeout=timeout, max_retries=max_retries, retry_delay=retry_delay)
 
         # Build URL for reference
         url = scraper.build_url(
@@ -188,9 +217,10 @@ def search(category, keyword, price_from, price_to, location, radius, pages_get,
 
             if page_info:
                 pages_get_int = page_info['total_pages']
-                click.echo(f"Found {pages_get_int} pages total\n")
+                click.echo(f"✅ Found {pages_get_int} pages total\n")
             else:
-                click.echo("❌ Could not detect total pages, defaulting to 1 page")
+                click.echo(f"❌ Could not detect total pages after {max_retries} retries, defaulting to 1 page")
+                click.echo("   (You can try again with --max-retries to increase retry attempts)\n")
                 pages_get_int = 1
         else:
             try:
@@ -251,9 +281,9 @@ def search(category, keyword, price_from, price_to, location, radius, pages_get,
             _save_as_csv(items, output)
         elif format == "table":
             _save_as_table(items, output)
-        elif format == "html":
-            # Auto-generate HTML output filename if not provided
-            html_output = output if output != "bazos_results.json" else f"bazos_report_{keyword}.html"
+        elif format == "html" or format == "html_dynamic":
+            # Use the auto-generated output filename
+            html_output = output
 
             # Handle image downloading if requested
             image_map = None
@@ -270,17 +300,30 @@ def search(category, keyword, price_from, price_to, location, radius, pages_get,
                     image_map = None
 
             # Generate HTML report
-            click.echo(f"📄 Generating HTML report...")
-            generator = HTMLReportGenerator()
-            generator.generate_report(
-                items=items,
-                output_file=html_output,
-                topic=category,
-                keyword=keyword,
-                include_images=not no_images,
-                image_map=image_map,
-                truncate_descriptions=truncate_descriptions,
-            )
+            if format == "html_dynamic":
+                click.echo(f"📄 Generating dynamic HTML report with filtering...")
+                generator = HTMLReportGenerator()
+                generator.generate_dynamic_report(
+                    items=items,
+                    output_file=html_output,
+                    topic=category,
+                    keyword=keyword,
+                    include_images=not no_images,
+                    image_map=image_map,
+                    truncate_descriptions=truncate_descriptions,
+                )
+            else:
+                click.echo(f"📄 Generating HTML report...")
+                generator = HTMLReportGenerator()
+                generator.generate_report(
+                    items=items,
+                    output_file=html_output,
+                    topic=category,
+                    keyword=keyword,
+                    include_images=not no_images,
+                    image_map=image_map,
+                    truncate_descriptions=truncate_descriptions,
+                )
             output = html_output
             if download_images and not no_images:
                 click.echo(f"🖼️  Images saved to: {click.style(images_dir, bold=True)}")
