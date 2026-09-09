@@ -1480,8 +1480,22 @@ class HTMLReportGenerator:
                 }}
 
                 function updateCounter() {{
-                    document.getElementById('currentCount').textContent = filteredData.length;
-                    document.getElementById('totalItems').textContent = allData.total_items;
+                    document.getElementById('totalItems').textContent = filteredData.length;
+                }}
+
+                function updatePositionCounter() {{
+                    const items = document.querySelectorAll('.item');
+                    const headerHeight = document.querySelector('.header').offsetHeight + 50;
+                    let currentItemIndex = 1;
+
+                    items.forEach((item, index) => {{
+                        const rect = item.getBoundingClientRect();
+                        if (rect.top < headerHeight + 10) {{
+                            currentItemIndex = index + 1;
+                        }}
+                    }});
+
+                    document.getElementById('currentCount').textContent = currentItemIndex;
                 }}
 
                 function renderItems() {{
@@ -1493,6 +1507,7 @@ class HTMLReportGenerator:
 
                     if (filteredData.length === 0) {{
                         noResults.style.display = 'block';
+                        document.getElementById('currentCount').textContent = '0';
                         return;
                     }}
 
@@ -1529,6 +1544,9 @@ class HTMLReportGenerator:
 
                         container.innerHTML += itemHTML;
                     }});
+
+                    // Update position counter after rendering
+                    updatePositionCounter();
                 }}
 
                 function clearAllFilters() {{
@@ -1579,6 +1597,11 @@ class HTMLReportGenerator:
                     if (e.target === this) {{
                         closeModal();
                     }}
+                }});
+
+                // Track scroll position for filtered items
+                window.addEventListener('scroll', function() {{
+                    updatePositionCounter();
                 }});
 
                 // Initialize
