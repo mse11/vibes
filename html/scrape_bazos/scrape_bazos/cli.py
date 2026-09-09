@@ -109,7 +109,12 @@ def cli():
     type=str,
     help="Directory to save downloaded images (default: images, only applies to --format html)",
 )
-def search(category, keyword, price_from, price_to, location, radius, pages_get, output, format, timeout, display, pages_count, details_all, no_images, download_images, images_dir):
+@click.option(
+    "--truncate-descriptions",
+    is_flag=True,
+    help="Truncate descriptions to 2 lines in HTML report (only applies to --format html)",
+)
+def search(category, keyword, price_from, price_to, location, radius, pages_get, output, format, timeout, display, pages_count, details_all, no_images, download_images, images_dir, truncate_descriptions):
     """
     Search for listings on bazos.sk
 
@@ -274,6 +279,7 @@ def search(category, keyword, price_from, price_to, location, radius, pages_get,
                 keyword=keyword,
                 include_images=not no_images,
                 image_map=image_map,
+                truncate_descriptions=truncate_descriptions,
             )
             output = html_output
             if download_images and not no_images:
@@ -359,7 +365,12 @@ def categories():
     type=str,
     help="Directory to save downloaded images (default: images, HTML format only)",
 )
-def convert_format(input, output, category, keyword, no_images, download_images, images_dir):
+@click.option(
+    "--truncate-descriptions",
+    is_flag=True,
+    help="Truncate descriptions to 2 lines in HTML report (HTML format only)",
+)
+def convert_format(input, output, category, keyword, no_images, download_images, images_dir, truncate_descriptions):
     """
     Convert scraped data between formats
 
@@ -442,6 +453,7 @@ def convert_format(input, output, category, keyword, no_images, download_images,
                 keyword=keyword,
                 include_images=not no_images,
                 image_map=image_map,
+                truncate_descriptions=truncate_descriptions,
             )
 
             if download_images and not no_images:

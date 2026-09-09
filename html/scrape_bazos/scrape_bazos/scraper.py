@@ -481,6 +481,12 @@ class BazosScraper:
             if not item_url:
                 return None
 
+            # Convert relative URLs to full URLs immediately
+            if not item_url.startswith("http"):
+                # Use category subdomain if available, otherwise default to www
+                category_domain = category.lower() if category else "www"
+                item_url = f"https://{category_domain}.bazos.sk{item_url}"
+
             # ========== IMAGE EXTRACTION ==========
             image_url = None
             img_tag = container.find("img", class_="obrazek")
@@ -581,14 +587,8 @@ class BazosScraper:
             Updated BazosItem with item_details populated
         """
         try:
-            # Construct proper URL
+            # item_url is already a full URL from _extract_item()
             url = item.item_url
-
-            # If URL is relative, build absolute URL with category subdomain
-            if not url.startswith("http"):
-                # Use category subdomain if available, otherwise default to www
-                category = item.category.lower() if item.category else "www"
-                url = f"https://{category}.bazos.sk{url}"
 
             # Try to fetch the page
             response = self.session.get(url, timeout=self.timeout)
@@ -665,27 +665,26 @@ class BazosScraper:
 
             # ========== EXTRACT FULL DESCRIPTION ==========
             # Look for detailed description in div.popisdetail or similar
-            full_desc_parts = []
+            full_description = None
 
             # Try to find popisdetail div
             desc_div = soup.find("div", class_="popisdetail")
             if desc_div:
-                # Get all text, preserving structure with line breaks
-                for elem in desc_div.find_all(["p", "br", "div"]):
-                    text = elem.get_text(strip=True)
-                    if text:
-                        full_desc_parts.append(text)
+                # Replace <br> tags with newlines to preserve formatting
+                import re as regex_module
+                html_str = str(desc_div)
+                # Replace <br>, <br/>, <br /> with newlines
+                html_str = regex_module.sub(r'<br\s*/?>', '\n', html_str, flags=regex_module.IGNORECASE)
+                # Remove HTML tags
+                clean_text = regex_module.sub(r'<[^>]+>', '', html_str)
+                # Clean up excessive whitespace while preserving newlines
+                clean_text = regex_module.sub(r'\n\s*\n', '\n', clean_text)  # Remove multiple blank lines
+                clean_text = regex_module.sub(r'[ \t]+', ' ', clean_text)    # Collapse spaces/tabs on same line
+                full_description = clean_text.strip()
 
-            # Fallback: look for any div with detailed content
-            if not full_desc_parts:
-                main_content = soup.find("div", class_="maincontent")
-                if main_content:
-                    # Get description before other elements
-                    desc_text = main_content.get_text(strip=True)
-                    if desc_text:
-                        full_desc_parts.append(desc_text)
-
-            full_description = "\n".join(full_desc_parts) if full_desc_parts else item.description
+            # Fallback: if no popisdetail found, use the item's description
+            if not full_description:
+                full_description = item.description
 
             # ========== CREATE ITEM_DETAILS OBJECT ==========
             item.item_details = BazosItemDetails(
