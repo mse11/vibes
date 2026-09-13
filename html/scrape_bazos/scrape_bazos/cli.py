@@ -324,6 +324,12 @@ def search(category, keyword, price_from, price_to, location, radius, pages_get,
                     image_map=image_map,
                     truncate_descriptions=truncate_descriptions,
                 )
+
+            # Also save JSON file when using HTML formats
+            json_output = Path(html_output).stem + ".json"
+            click.echo(f"💾 Also saving JSON file: {click.style(json_output, bold=True)}")
+            scraper.save_results(items, json_output)
+
             output = html_output
             if download_images and not no_images:
                 click.echo(f"🖼️  Images saved to: {click.style(images_dir, bold=True)}")
