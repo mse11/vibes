@@ -26,7 +26,7 @@ def cli():
 @click.option(
     "--category",
     required=True,
-    help="Category (e.g., pc, auto, reality, elektronika, domacnost, knihy, oblecenie, sport)",
+    help="Category (e.g., pc, auto, reality, elektronika, domacnost, knihy, oblecenie, sport). Required - run 'categories' command to see all available options",
 )
 @click.option(
     "--keyword",
@@ -184,6 +184,32 @@ def search(category, keyword, price_from, price_to, location, radius, pages_get,
         if not keyword:
             click.echo("❌ At least one --keyword is required", err=True)
             raise SystemExit(1)
+
+        # Validate and process category parameter
+        category = category.strip().lower()
+
+        # If category is empty, 'all', or 'www', use 'www'
+        if not category or category == "all":
+            category = "www"
+        else:
+            # Try to validate the category against available categories
+            scraper_temp = BazosScraper(timeout=timeout, max_retries=max_retries, retry_delay=retry_delay)
+            click.echo("📂 Fetching available categories for validation...", err=False)
+            available_categories = scraper_temp.get_categories()
+
+            if available_categories:
+                # Check if provided category exists in available categories
+                if category not in available_categories:
+                    click.echo(f"❌ Invalid category: '{click.style(category, bold=True)}'", err=True)
+                    click.echo("\n📂 Available Categories:\n", err=True)
+                    for cat_code, cat_desc in sorted(available_categories.items()):
+                        click.echo(f"  {click.style(cat_code.ljust(15), fg='cyan')} → {cat_desc}", err=True)
+                    click.echo(f"\n✅ Found {len(available_categories)} categories", err=True)
+                    click.echo("\nUsage: scrape-bazos search --category <category_code> --keyword <keyword>", err=True)
+                    raise SystemExit(1)
+            else:
+                # If we can't fetch categories, log a warning but continue
+                click.echo("⚠️  Could not validate category (unable to fetch from bazos.sk), proceeding anyway...", err=False)
 
         # Create scraper
         scraper = BazosScraper(timeout=timeout, max_retries=max_retries, retry_delay=retry_delay)
