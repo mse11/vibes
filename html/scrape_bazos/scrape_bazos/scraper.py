@@ -124,7 +124,9 @@ class BazosScraper:
         max_pages: int = 1,
     ) -> List[BazosItem]:
         """
-        Scrape listings from bazos.sk
+        Scrape listings from bazos.sk with OPTIMIZED pagination
+
+        OPTIMIZATION: Uses dynamic next-page detection instead of pre-calculating page count
 
         Args:
             category: Category
@@ -134,6 +136,9 @@ class BazosScraper:
             radius: Search radius
             location: Specific location
             max_pages: Maximum pages to scrape
+                      - Normal number (e.g., 5): Stop at page 5
+                      - Large number (999999): Scrape all until no next page found
+                      - This allows --pages-get all to work without separate get_page_count() call
 
         Returns:
             List of BazosItem objects
@@ -148,8 +153,15 @@ class BazosScraper:
             location=location,
         )
 
-        for page in range(max_pages):
-            print(f"Scraping page {page + 1}: {url}")
+        page = 1
+
+        while True:
+            # Stop if reached max_pages limit
+            if page > max_pages:
+                print(f"Reached max_pages limit ({max_pages}), stopping pagination")
+                break
+
+            print(f"Scraping page {page}: {url}")
 
             try:
                 response = self.session.get(url, timeout=self.timeout)
@@ -158,33 +170,31 @@ class BazosScraper:
                 page_items = self._parse_listings(response.text, category)
                 items.extend(page_items)
 
-                print(f"Found {len(page_items)} items on page {page + 1}")
+                print(f"Found {len(page_items)} items on page {page}")
 
-                # For subsequent pages, extract next page parameters from pagination
-                if page < max_pages - 1:
-                    next_page = self._get_next_page_url_v2(response.text)
-                    if next_page:
-                        # next_page can be two types:
-                        # 1. "&kitx=ne&crp=20" (from page 1 style pagination)
-                        # 2. "/40/?hledat=nas&..." (from page 2+ style pagination)
+                # OPTIMIZATION: Check for next page on THIS response
+                # If no next page exists, we've reached the end
+                next_page_url = self._get_next_page_url_v2(response.text)
+                if not next_page_url:
+                    print(f"No next page found, stopping pagination")
+                    break
 
-                        if next_page.startswith("/"):
-                            # Page 2+ style: relative URL with path prefix
-                            topic = category.lower()
-                            url = f"https://{topic}.bazos.sk{next_page}"
-                        else:
-                            # Page 1 style: query parameters only
-                            base_url = url.split("&kitx=")[0] if "&kitx=" in url else url
-                            url = base_url + next_page
+                # Build URL for next page
+                if next_page_url.startswith("/"):
+                    # Page 2+ style: relative URL with path prefix
+                    topic = category.lower()
+                    url = f"https://{topic}.bazos.sk{next_page_url}"
+                else:
+                    # Page 1 style: query parameters only
+                    base_url = url.split("&kitx=")[0] if "&kitx=" in url else url
+                    url = base_url + next_page_url
 
-                        print(f"  Next page URL: {url}")
-                    else:
-                        print(f"No next page found, stopping pagination")
-                        break
+                print(f"  Next page URL: {url}")
+                page += 1
 
             except requests.RequestException as e:
-                print(f"Error scraping page {page + 1}: {e}")
-                continue
+                print(f"Error scraping page {page}: {e}")
+                break
 
         return items
 

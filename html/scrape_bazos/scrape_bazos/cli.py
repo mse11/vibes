@@ -265,43 +265,32 @@ def search(category, keyword, price_from, price_to, location, radius, pages_get,
 
         # Handle pages_get parameter - can be "all" or a number
         if pages_get.lower() == "all":
-            click.echo("📊 Detecting total pages for each keyword...")
-            pages_get_int = None
+            # OPTIMIZATION: Don't call get_page_count() - it wastes N requests!
+            # Instead, use max_pages=999999 to signal "scrape until end"
+            # The scrape_listings() method will:
+            # 1. Fetch each page
+            # 2. Check if there's a next page link
+            # 3. Stop when no next page is found
+            # This achieves the same result (scraping all pages) in just N requests instead of 2N
 
-            for kw in keyword:
-                page_info = scraper.get_page_count(
-                    category=category,
-                    keyword=kw,
-                    price_from=price_from,
-                    price_to=price_to,
-                    radius=radius,
-                    location=location,
-                )
+            click.echo("📊 Scraping all available pages (will stop when no more pages)...")
+            pages_get_int = 999999  # ← Signal to scrape until pagination ends
 
-                if page_info:
-                    pages_found = page_info['total_pages']
-                    click.echo(f"  '{kw}': {pages_found} pages")
-                    # Use the maximum pages found across all keywords
-                    if pages_get_int is None or pages_found > pages_get_int:
-                        pages_get_int = pages_found
-                else:
-                    click.echo(f"  '{kw}': Could not detect pages, using 1")
-
-            if pages_get_int is None:
-                click.echo(f"❌ Could not detect total pages after {max_retries} retries, defaulting to 1 page")
-                click.echo("   (You can try again with --max-retries to increase retry attempts)\n")
-                pages_get_int = 1
-            else:
-                click.echo(f"✅ Found max {pages_get_int} pages\n")
         else:
             try:
                 pages_get_int = int(pages_get)
+                if pages_get_int <= 0:
+                    click.echo(f"❌ Invalid value for --pages-get: must be > 0", err=True)
+                    raise SystemExit(1)
             except ValueError:
                 click.echo(f"❌ Invalid value for --pages-get: '{pages_get}' (use a number or 'all')", err=True)
                 raise SystemExit(1)
 
         # Scrape listings for each keyword and merge results
-        click.echo(f"📡 Scraping {pages_get_int} page(s) for {len(keyword)} keyword(s)...\n")
+        if pages_get_int == 999999:
+            click.echo(f"📡 Scraping all pages for {len(keyword)} keyword(s)...\n")
+        else:
+            click.echo(f"📡 Scraping up to {pages_get_int} page(s) for {len(keyword)} keyword(s)...\n")
         all_items = []
         items_by_url = {}  # For deduplication
 
