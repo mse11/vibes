@@ -30,8 +30,9 @@ def cli():
 )
 @click.option(
     "--keyword",
+    multiple=True,
     required=True,
-    help="Search keyword (e.g., nas, notebook, skoda)",
+    help="Search keyword(s). Can specify multiple times: --keyword 'nas' --keyword 'backup' (results will be merged)",
 )
 @click.option(
     "--price-from",
@@ -56,9 +57,9 @@ def cli():
 )
 @click.option(
     "--pages-get",
-    default="1",
+    default="all",
     type=str,
-    help="Number of pages to scrape or 'all' (default: 1)",
+    help="Number of pages to scrape or 'all' (default: all, use a number for quick sample)",
 )
 @click.option(
     "--output",
@@ -69,8 +70,8 @@ def cli():
 @click.option(
     "--format",
     type=click.Choice(["json", "csv", "table", "html", "html_dynamic"]),
-    default="json",
-    help="Output format (default: json). Use 'html_dynamic' for interactive filtering",
+    default="html_dynamic",
+    help="Output format (default: html_dynamic - interactive). Use 'json' for data export",
 )
 @click.option(
     "--timeout",
@@ -130,17 +131,45 @@ def search(category, keyword, price_from, price_to, location, radius, pages_get,
     """
     Search for listings on bazos.sk
 
+    MULTI-KEYWORD SEARCHING:
+    When multiple keywords are provided, results from each keyword are scraped
+    separately and then merged (deduplicated by URL). All pages are fetched by
+    default for comprehensive results.
+
+    OUTPUT FORMATS:
+    Default format is 'html_dynamic' which generates an interactive HTML report
+    with filtering, sorting, and search capabilities. Use --format to change
+    to json (data export), csv, table, or static html.
+
     Examples:
 
+        # Single keyword - generates interactive HTML report by default
         scrape-bazos search --category pc --keyword "nas"
 
+        # Multiple keywords - each scraped separately and merged
+        scrape-bazos search --category pc --keyword "nas" --keyword "backup"
+
+        # Limit to specific number of pages (quick sample)
+        scrape-bazos search --category pc --keyword "nas" --pages-get 2
+
+        # Export as JSON
+        scrape-bazos search --category pc --keyword "nas" --format json
+
+        # Static HTML report
         scrape-bazos search --category pc --keyword "nas" --format html
 
-        scrape-bazos search --category pc --keyword "nas" --format html --download-images
+        # Download images with HTML report
+        scrape-bazos search --category pc --keyword "nas" --download-images
+
+        # Multiple keywords with page limit
+        scrape-bazos search --category pc --keyword "nas" --keyword "backup" --pages-get 2
+
+        # Check available pages for each keyword
+        scrape-bazos search --category pc --keyword "nas" --keyword "backup" --pages-count
 
         scrape-bazos search --category pc --keyword "notebook" --price-from 500 --price-to 1000
 
-        scrape-bazos search --category auto --keyword "skoda" --price-to 15000 --pages-get 3
+        scrape-bazos search --category auto --keyword "skoda" --price-to 15000
 
         scrape-bazos search --category reality --keyword "byt" --location "Bratislava" --radius 10 --format csv
 
@@ -151,77 +180,93 @@ def search(category, keyword, price_from, price_to, location, radius, pages_get,
         if format not in ["html", "html_dynamic"] and (no_images or download_images):
             click.echo("⚠️  Note: --no-images and --download-images only apply to --format html and html_dynamic", err=False)
 
-        # Auto-generate output filename if not provided
-        if not output or output == "bazos_results.json":
-            # Replace spaces with underscores in category and keyword for safe filenames
-            safe_category = category.replace(" ", "_")
-            safe_keyword = keyword.replace(" ", "_")
-
-            if format == "html":
-                output = f"bazos_report_{safe_category}_{safe_keyword}.html"
-            elif format == "html_dynamic":
-                output = f"bazos_report_dynamic_{safe_category}_{safe_keyword}.html"
-            elif format == "csv":
-                output = f"bazos_results_{safe_category}_{safe_keyword}.csv"
-            elif format == "table":
-                output = f"bazos_results_{safe_category}_{safe_keyword}.txt"
-            else:  # json
-                output = f"bazos_results_{safe_category}_{safe_keyword}.json"
+        # Validate keyword is provided
+        if not keyword:
+            click.echo("❌ At least one --keyword is required", err=True)
+            raise SystemExit(1)
 
         # Create scraper
         scraper = BazosScraper(timeout=timeout, max_retries=max_retries, retry_delay=retry_delay)
 
-        # Build URL for reference
-        url = scraper.build_url(
-            category=category,
-            keyword=keyword,
-            price_from=price_from,
-            price_to=price_to,
-            radius=radius,
-            location=location,
-        )
-        click.echo(f"🔍 Search URL: {url}\n")
+        # Auto-generate output filename if not provided
+        if not output or output == "bazos_results.json":
+            # Replace spaces with underscores in category and keywords for safe filenames
+            safe_category = category.replace(" ", "_")
+            keywords_str = "_".join(k.replace(" ", "_") for k in keyword)
 
-        # If only counting pages, fetch first page and show page info
+            if format == "html":
+                output = f"bazos_report_{safe_category}_{keywords_str}.html"
+            elif format == "html_dynamic":
+                output = f"bazos_report_dynamic_{safe_category}_{keywords_str}.html"
+            elif format == "csv":
+                output = f"bazos_results_{safe_category}_{keywords_str}.csv"
+            elif format == "table":
+                output = f"bazos_results_{safe_category}_{keywords_str}.txt"
+            else:  # json
+                output = f"bazos_results_{safe_category}_{keywords_str}.json"
+
+        # Show what we're searching for
+        click.echo(f"🔍 Searching for keywords: {click.style(', '.join(keyword), bold=True)}\n")
+
+        # If only counting pages, fetch first page and show page info for each keyword
         if pages_count:
-            click.echo("📊 Checking available pages...")
-            page_info = scraper.get_page_count(
-                category=category,
-                keyword=keyword,
-                price_from=price_from,
-                price_to=price_to,
-                radius=radius,
-                location=location,
-            )
+            click.echo("📊 Checking available pages for each keyword...\n")
+            total_pages_all = 0
+            total_items_all = 0
 
-            if page_info:
-                click.echo(f"\n📄 Page Information:")
-                click.echo(f"   Total pages: {page_info['total_pages']}")
-                click.echo(f"   Total items: {page_info['total_items']}\n")
-            else:
-                click.echo("❌ Could not retrieve page information")
+            for kw in keyword:
+                page_info = scraper.get_page_count(
+                    category=category,
+                    keyword=kw,
+                    price_from=price_from,
+                    price_to=price_to,
+                    radius=radius,
+                    location=location,
+                )
+
+                if page_info:
+                    click.echo(f"  '{kw}': {page_info['total_pages']} pages, ~{page_info['total_items']} items")
+                    total_pages_all += page_info['total_pages']
+                    total_items_all += page_info['total_items']
+                else:
+                    click.echo(f"  '{kw}': Could not retrieve page information")
+
+            click.echo(f"\n📄 Total Across All Keywords:")
+            click.echo(f"   Total pages: {total_pages_all}")
+            click.echo(f"   Total items: ~{total_items_all}\n")
 
             raise SystemExit(0)
 
         # Handle pages_get parameter - can be "all" or a number
         if pages_get.lower() == "all":
-            click.echo("📊 Detecting total pages...")
-            page_info = scraper.get_page_count(
-                category=category,
-                keyword=keyword,
-                price_from=price_from,
-                price_to=price_to,
-                radius=radius,
-                location=location,
-            )
+            click.echo("📊 Detecting total pages for each keyword...")
+            pages_get_int = None
 
-            if page_info:
-                pages_get_int = page_info['total_pages']
-                click.echo(f"✅ Found {pages_get_int} pages total\n")
-            else:
+            for kw in keyword:
+                page_info = scraper.get_page_count(
+                    category=category,
+                    keyword=kw,
+                    price_from=price_from,
+                    price_to=price_to,
+                    radius=radius,
+                    location=location,
+                )
+
+                if page_info:
+                    pages_found = page_info['total_pages']
+                    click.echo(f"  '{kw}': {pages_found} pages")
+                    # Use the maximum pages found across all keywords
+                    if pages_get_int is None or pages_found > pages_get_int:
+                        pages_get_int = pages_found
+                else:
+                    click.echo(f"  '{kw}': Could not detect pages, using 1")
+
+            if pages_get_int is None:
                 click.echo(f"❌ Could not detect total pages after {max_retries} retries, defaulting to 1 page")
                 click.echo("   (You can try again with --max-retries to increase retry attempts)\n")
                 pages_get_int = 1
+            else:
+                click.echo(f"✅ Found max {pages_get_int} pages\n")
         else:
             try:
                 pages_get_int = int(pages_get)
@@ -229,19 +274,33 @@ def search(category, keyword, price_from, price_to, location, radius, pages_get,
                 click.echo(f"❌ Invalid value for --pages-get: '{pages_get}' (use a number or 'all')", err=True)
                 raise SystemExit(1)
 
-        # Scrape listings
-        click.echo(f"📡 Scraping {pages_get_int} page(s)...")
-        items = scraper.scrape_listings(
-            category=category,
-            keyword=keyword,
-            price_from=price_from,
-            price_to=price_to,
-            radius=radius,
-            location=location,
-            max_pages=pages_get_int,
-        )
+        # Scrape listings for each keyword and merge results
+        click.echo(f"📡 Scraping {pages_get_int} page(s) for {len(keyword)} keyword(s)...\n")
+        all_items = []
+        items_by_url = {}  # For deduplication
 
-        click.echo(f"\n✅ Found {len(items)} items\n")
+        for kw in keyword:
+            click.echo(f"  Searching for: '{click.style(kw, bold=True)}'")
+            items = scraper.scrape_listings(
+                category=category,
+                keyword=kw,
+                price_from=price_from,
+                price_to=price_to,
+                radius=radius,
+                location=location,
+                max_pages=pages_get_int,
+            )
+
+            click.echo(f"    Found {len(items)} items")
+
+            # Add items, using URL as unique identifier to avoid duplicates
+            for item in items:
+                if item.item_url not in items_by_url:
+                    items_by_url[item.item_url] = item
+                    all_items.append(item)
+
+        items = all_items
+        click.echo(f"\n✅ Found {len(items)} unique items across all keywords\n")
 
         # Fetch detailed information if requested
         if details_all:
@@ -300,6 +359,7 @@ def search(category, keyword, price_from, price_to, location, radius, pages_get,
                     image_map = None
 
             # Generate HTML report
+            keywords_display = ", ".join(keyword) if len(keyword) > 1 else keyword[0]
             if format == "html_dynamic":
                 click.echo(f"📄 Generating dynamic HTML report with filtering...")
                 generator = HTMLReportGenerator()
@@ -307,7 +367,7 @@ def search(category, keyword, price_from, price_to, location, radius, pages_get,
                     items=items,
                     output_file=html_output,
                     topic=category,
-                    keyword=keyword,
+                    keyword=keywords_display,
                     include_images=not no_images,
                     image_map=image_map,
                     truncate_descriptions=truncate_descriptions,
@@ -319,7 +379,7 @@ def search(category, keyword, price_from, price_to, location, radius, pages_get,
                     items=items,
                     output_file=html_output,
                     topic=category,
-                    keyword=keyword,
+                    keyword=keywords_display,
                     include_images=not no_images,
                     image_map=image_map,
                     truncate_descriptions=truncate_descriptions,
