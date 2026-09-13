@@ -56,6 +56,11 @@ def cli():
     help="Search radius in km (default: 25)",
 )
 @click.option(
+    "--sub-category",
+    default=None,
+    help="Optional subcategory/group within category (e.g., 'predam', 'prenajmu' for reality). Run 'categories -s -c <category>' to see available options",
+)
+@click.option(
     "--pages-get",
     default="all",
     type=str,
@@ -127,7 +132,7 @@ def cli():
     is_flag=True,
     help="Truncate descriptions to 2 lines in HTML report (only applies to --format html)",
 )
-def search(category, keyword, price_from, price_to, location, radius, pages_get, output, format, timeout, max_retries, retry_delay, display, pages_count, details_all, no_images, download_images, images_dir, truncate_descriptions):
+def search(category, keyword, price_from, price_to, location, radius, sub_category, pages_get, output, format, timeout, max_retries, retry_delay, display, pages_count, details_all, no_images, download_images, images_dir, truncate_descriptions):
     """
     Search for listings on bazos.sk
 
@@ -214,6 +219,62 @@ def search(category, keyword, price_from, price_to, location, radius, pages_get,
         # Create scraper
         scraper = BazosScraper(timeout=timeout, max_retries=max_retries, retry_delay=retry_delay)
 
+        # Validate sub_category if provided
+        if sub_category:
+            sub_category = sub_category.strip().lower()
+
+            # Try to validate the sub_category against available subcategories for this category
+            click.echo("📂 Fetching available subcategories for category validation...", err=False)
+
+            # Try grouped structure first (for categories like 'reality')
+            grouped_categories = scraper.get_subcategories_grouped(category)
+
+            # If no grouped structure, try flat structure (for categories like 'pc')
+            flat_categories = {}
+            if not grouped_categories:
+                flat_categories = scraper.get_subcategories(category)
+
+            # Determine which structure we have
+            if grouped_categories:
+                # Using grouped structure
+                if sub_category not in grouped_categories:
+                    click.echo(f"❌ Invalid subcategory: '{click.style(sub_category, bold=True)}' for category '{click.style(category, bold=True)}'", err=True)
+                    click.echo(f"\n📂 Available Subcategories:\n", err=True)
+                    for group_id, group_data in sorted(grouped_categories.items()):
+                        group_name = group_data.get('name', group_id)
+                        subcat_count = len(group_data.get('subcategories', {}))
+                        click.echo(f"  {click.style(group_id.ljust(15), fg='cyan')} → {group_name} ({subcat_count} items)", err=True)
+                    click.echo(f"\n✅ Found {len(grouped_categories)} available subcategory/group(s)", err=True)
+                    click.echo("\nUsage: scrape-bazos search --category <category> --sub-category <subcategory> --keyword <keyword>", err=True)
+                    raise SystemExit(1)
+                else:
+                    # Show which subcategory was selected
+                    group_data = grouped_categories[sub_category]
+                    group_name = group_data.get('name', sub_category)
+                    subcat_count = len(group_data.get('subcategories', {}))
+                    click.echo(f"✅ Valid subcategory '{click.style(group_name, bold=True)}' ({subcat_count} items)\n", err=False)
+            elif flat_categories:
+                # Using flat structure
+                if sub_category not in flat_categories:
+                    click.echo(f"❌ Invalid subcategory: '{click.style(sub_category, bold=True)}' for category '{click.style(category, bold=True)}'", err=True)
+                    click.echo(f"\n📂 Available Subcategories:\n", err=True)
+                    for subcat_id, subcat_name in sorted(flat_categories.items()):
+                        click.echo(f"  {click.style(subcat_id.ljust(15), fg='cyan')} → {subcat_name}", err=True)
+                    click.echo(f"\n✅ Found {len(flat_categories)} available subcategories", err=True)
+                    click.echo("\nUsage: scrape-bazos search --category <category> --sub-category <subcategory> --keyword <keyword>", err=True)
+                    raise SystemExit(1)
+                else:
+                    # Show which subcategory was selected
+                    subcat_name = flat_categories[sub_category]
+                    click.echo(f"✅ Valid subcategory '{click.style(subcat_name, bold=True)}'\n", err=False)
+            else:
+                # No subcategories found - reject the provided subcategory
+                click.echo(f"❌ Invalid sub-category: '{click.style(sub_category, bold=True)}'", err=True)
+                click.echo(f"\n📂 Available Subcategories for '{category}':\n", err=True)
+                click.echo(f"  (no subcategories available for this category)", err=True)
+                click.echo(f"\nUsage: scrape-bazos search --category <category> --sub-category <subcategory> --keyword <keyword>", err=True)
+                raise SystemExit(1)
+
         # Auto-generate output filename if not provided
         if not output or output == "bazos_results.json":
             # Replace spaces with underscores in category and keywords for safe filenames
@@ -248,6 +309,7 @@ def search(category, keyword, price_from, price_to, location, radius, pages_get,
                     price_to=price_to,
                     radius=radius,
                     location=location,
+                    sub_category=sub_category,
                 )
 
                 if page_info:
@@ -304,6 +366,7 @@ def search(category, keyword, price_from, price_to, location, radius, pages_get,
                 radius=radius,
                 location=location,
                 max_pages=pages_get_int,
+                sub_category=sub_category,
             )
 
             click.echo(f"    Found {len(items)} items")

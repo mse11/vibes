@@ -75,6 +75,7 @@ class BazosScraper:
         price_to: Optional[str] = None,
         radius: int = 25,
         location: str = "",
+        sub_category: Optional[str] = None,
     ) -> str:
         """
         Build the search URL for bazos.sk
@@ -86,6 +87,7 @@ class BazosScraper:
             price_to: Maximum price
             radius: Search radius in km
             location: Specific location
+            sub_category: Optional subcategory/group within category (e.g., 'predam', 'prenajmu' for reality)
 
         Returns:
             Full search URL
@@ -93,6 +95,21 @@ class BazosScraper:
         # Normalize category to lowercase (website URLs use lowercase)
         category = category.lower()
         base = self.BASE_URL.format(topic=category)
+
+        # If sub_category is provided, include it in the base path
+        # e.g., "https://reality.bazos.sk/" becomes "https://reality.bazos.sk/predam/"
+        if sub_category:
+            sub_category = sub_category.lower().strip("/")
+
+            # Layer 4: Runtime Format Validation
+            # Check for invalid characters (only alphanumeric, hyphens, and underscores allowed)
+            if not all(c.isalnum() or c in '-_' for c in sub_category):
+                raise ValueError(
+                    f"Invalid subcategory format: '{sub_category}'. "
+                    "Only alphanumeric characters, hyphens, and underscores allowed."
+                )
+
+            base = f"{base}{sub_category}/"
 
         params = {
             "hledat": keyword,
@@ -122,6 +139,7 @@ class BazosScraper:
         radius: int = 25,
         location: str = "",
         max_pages: int = 1,
+        sub_category: Optional[str] = None,
     ) -> List[BazosItem]:
         """
         Scrape listings from bazos.sk with OPTIMIZED pagination
@@ -139,19 +157,26 @@ class BazosScraper:
                       - Normal number (e.g., 5): Stop at page 5
                       - Large number (999999): Scrape all until no next page found
                       - This allows --pages-get all to work without separate get_page_count() call
+            sub_category: Optional subcategory/group within category (e.g., 'predam', 'prenajmu' for reality)
 
         Returns:
             List of BazosItem objects
         """
         items = []
-        url = self.build_url(
-            category=category,
-            keyword=keyword,
-            price_from=price_from,
-            price_to=price_to,
-            radius=radius,
-            location=location,
-        )
+
+        try:
+            url = self.build_url(
+                category=category,
+                keyword=keyword,
+                price_from=price_from,
+                price_to=price_to,
+                radius=radius,
+                location=location,
+                sub_category=sub_category,
+            )
+        except ValueError as e:
+            print(f"❌ Error building URL: {e}")
+            return []  # Return empty list on format error
 
         page = 1
 
@@ -354,6 +379,7 @@ class BazosScraper:
         radius: int = 25,
         location: str = "",
         retry: bool = True,
+        sub_category: Optional[str] = None,
     ) -> Optional[Dict]:
         """
         Get page count information by traversing all pages
@@ -366,20 +392,26 @@ class BazosScraper:
             radius: Search radius
             location: Specific location
             retry: Whether to retry on failure (default: True)
+            sub_category: Optional subcategory/group within category (e.g., 'predam', 'prenajmu' for reality)
 
         Returns:
             Dictionary with page info or None if error after all retries
         """
         import time
 
-        url = self.build_url(
-            category=category,
-            keyword=keyword,
-            price_from=price_from,
-            price_to=price_to,
-            radius=radius,
-            location=location,
-        )
+        try:
+            url = self.build_url(
+                category=category,
+                keyword=keyword,
+                price_from=price_from,
+                price_to=price_to,
+                radius=radius,
+                location=location,
+                sub_category=sub_category,
+            )
+        except ValueError as e:
+            print(f"❌ Error building URL: {e}")
+            return None  # Return None on format error
 
         print(f"Traversing pages to find total count...")
         attempt = 0
