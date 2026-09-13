@@ -794,6 +794,290 @@ class BazosScraper:
             # Return empty dict on error
             return {}
 
+    def get_subcategories(self, category: str) -> Dict[str, str]:
+        """
+        Fetch sub-categories for a given category from the category page.
+        Sub-categories are found in <div class="barvaleva"> with <a> tags.
+
+        Args:
+            category: Category code (e.g., 'pc', 'auto', 'reality')
+
+        Returns:
+            Dictionary mapping subcategory paths to names, or empty dict if fetch fails
+
+        Note:
+            Includes retry logic with exponential backoff for timeout errors.
+            Will retry up to max_retries times before giving up.
+        """
+        import time
+        from requests.exceptions import Timeout, ConnectionError
+
+        category = category.lower()
+        url = f"https://{category}.bazos.sk/"
+        attempt = 0
+        last_error = None
+
+        while attempt < self.max_retries:
+            attempt += 1
+            try:
+                response = self.session.get(url, timeout=self.timeout)
+                response.raise_for_status()
+
+                soup = BeautifulSoup(response.text, "lxml")
+                subcategories = {}
+
+                # Find the barvaleva div containing subcategories
+                barvaleva_div = soup.find("div", class_="barvaleva")
+
+                if not barvaleva_div:
+                    # No subcategories found for this category
+                    return {}
+
+                # Extract all links from the barvaleva div
+                links = barvaleva_div.find_all("a", href=True)
+
+                for link in links:
+                    href = link.get("href", "").strip()
+                    text = link.get_text(strip=True)
+
+                    # Skip empty values
+                    if href and text:
+                        # Normalize href to extract just the subcategory path
+                        # Can be absolute URL (https://...) or relative (/subcategory/)
+                        if href.startswith("http"):
+                            # Extract just the path after the domain
+                            # e.g., "https://foto.bazos.sk/" → "foto" (different domain)
+                            # or "https://pc.bazos.sk/notebook/" → "notebook"
+                            from urllib.parse import urlparse
+                            parsed = urlparse(href)
+                            path = parsed.path.strip("/")
+                            # If it's a different domain, use the domain name as key
+                            if parsed.netloc != f"{category}.bazos.sk":
+                                # Different domain, extract category from domain
+                                domain_category = parsed.netloc.split(".")[0]
+                                subcategories[domain_category] = text
+                            else:
+                                # Same domain, use path
+                                if path:
+                                    subcategories[path] = text
+                        else:
+                            # Relative URL - clean up the path
+                            path = href.strip("/")
+                            if path:
+                                subcategories[path] = text
+
+                return subcategories
+
+            except (Timeout, ConnectionError) as e:
+                last_error = e
+                if attempt < self.max_retries:
+                    wait_time = self.retry_delay * (2 ** (attempt - 1))  # Exponential backoff
+                    print(f"  ⚠️  Timeout on attempt {attempt}/{self.max_retries} for '{category}', retrying in {wait_time:.1f}s...")
+                    time.sleep(wait_time)
+                else:
+                    print(f"  ❌ Failed to fetch subcategories for '{category}' after {attempt} attempt(s): {e}")
+
+            except Exception as e:
+                print(f"Error fetching subcategories for '{category}': {e}")
+                # Return empty dict on error
+                return {}
+
+        # All retries exhausted
+        raise last_error if last_error else Exception(f"Failed to fetch subcategories for '{category}'")
+
+    def get_subcategories_grouped(self, category: str) -> Dict:
+        """
+        Fetch sub-categories organized by groups (for categories like 'reality').
+
+        Some categories have grouped subcategories:
+        - Reality (reality) has: Predaj (Sale) and Prenájom (Rent) groups
+        - Each group contains its own subcategories
+
+        Structure of <div class="menuleft">:
+            <div class="nadpismenu"><a>Group Name</a></div>
+            <div class="barvalmenu">
+                <div class="barvaleva">
+                    <a href="/group/subcat/">Subcategory</a>
+                </div>
+            </div>
+
+        Args:
+            category: Category code (e.g., 'reality', 'auto')
+
+        Returns:
+            Dictionary with grouped structure:
+            {
+                "group_id": {
+                    "name": "Group Name",
+                    "url": "/group/",
+                    "subcategories": {
+                        "subcat": "Subcategory Name",
+                        ...
+                    }
+                },
+                ...
+            }
+
+            Returns flat dict if no groups found (falls back to get_subcategories behavior)
+        """
+        import time
+        from requests.exceptions import Timeout, ConnectionError
+
+        category = category.lower()
+        url = f"https://{category}.bazos.sk/"
+        attempt = 0
+        last_error = None
+
+        while attempt < self.max_retries:
+            attempt += 1
+            try:
+                response = self.session.get(url, timeout=self.timeout)
+                response.raise_for_status()
+
+                soup = BeautifulSoup(response.text, "lxml")
+                grouped_categories = {}
+
+                # Find the menuleft div (contains grouped subcategories)
+                menuleft_div = soup.find("div", class_="menuleft")
+
+                if not menuleft_div:
+                    # No grouped structure, return empty and caller will use flat structure
+                    return {}
+
+                # Find all group headers (nadpismenu)
+                group_headers = menuleft_div.find_all("div", class_="nadpismenu")
+
+                if not group_headers:
+                    # No groups found
+                    return {}
+
+                # For each group header, find the associated subcategories
+                for i, group_header in enumerate(group_headers):
+                    # Get group name and URL from the link
+                    group_link = group_header.find("a", href=True)
+                    if not group_link:
+                        continue
+
+                    group_name = group_link.get_text(strip=True)
+                    group_url = group_link.get("href", "").strip()
+
+                    if not group_name or not group_url:
+                        continue
+
+                    # Extract group ID from URL
+                    # e.g., "/predam/" → "predam"
+                    group_id = group_url.strip("/")
+
+                    # Find the associated barvalmenu - it should be the next sibling
+                    barvalmenu = group_header.find_next_sibling("div", class_="barvalmenu")
+
+                    if not barvalmenu:
+                        continue
+
+                    # IMPROVED: Find ALL <div class="barvaleva"> within this barvalmenu
+                    # Some categories may have multiple barvaleva sections in one barvalmenu
+                    barvaleva_divs = barvalmenu.find_all("div", class_="barvaleva")
+
+                    if not barvaleva_divs:
+                        continue
+
+                    # Extract subcategories for this group
+                    subcategories = {}
+
+                    # Process all barvaleva divs in this group
+                    for barvaleva in barvaleva_divs:
+                        links = barvaleva.find_all("a", href=True)
+
+                        for link in links:
+                            href = link.get("href", "").strip()
+                            text = link.get_text(strip=True)
+
+                            if not href or not text:
+                                continue
+
+                            # Parse the subcategory path
+                            if href.startswith("http"):
+                                # Absolute URL
+                                from urllib.parse import urlparse
+                                parsed = urlparse(href)
+                                path = parsed.path.strip("/")
+
+                                if parsed.netloc != f"{category}.bazos.sk":
+                                    # Different domain (e.g., sluzby.bazos.sk from reality)
+                                    # Skip external domains
+                                    continue
+                                else:
+                                    # Same domain - extract just the subcat part
+                                    # e.g., "/predam/byt/" → "byt"
+                                    parts = path.split("/")
+                                    if len(parts) >= 2:
+                                        subcat_id = parts[1]  # Skip group, get subcat
+                                        if subcat_id not in subcategories:  # Avoid duplicates
+                                            subcategories[subcat_id] = text
+                            else:
+                                # Relative URL
+                                # e.g., "/predam/byt/" or "/ubytovanie/" (external)
+                                path = href.strip("/")
+
+                                # Check if it's a path with group prefix
+                                parts = path.split("/")
+                                if len(parts) >= 2:
+                                    # Has group prefix like "/predam/byt/"
+                                    subcat_id = parts[1]
+                                    if subcat_id not in subcategories:  # Avoid duplicates
+                                        subcategories[subcat_id] = text
+                                elif len(parts) == 1 and parts[0]:
+                                    # No group prefix (external), use as-is
+                                    if parts[0] not in subcategories:
+                                        subcategories[parts[0]] = text
+
+                    if subcategories:
+                        grouped_categories[group_id] = {
+                            "name": group_name,
+                            "url": group_url,
+                            "subcategories": subcategories
+                        }
+
+                return grouped_categories
+
+            except (Timeout, ConnectionError) as e:
+                last_error = e
+                if attempt < self.max_retries:
+                    wait_time = self.retry_delay * (2 ** (attempt - 1))
+                    print(f"  ⚠️  Timeout on attempt {attempt}/{self.max_retries} for grouped categories in '{category}'...")
+                    time.sleep(wait_time)
+                else:
+                    print(f"  ❌ Failed to fetch grouped categories for '{category}': {e}")
+
+            except Exception as e:
+                print(f"Error fetching grouped categories for '{category}': {e}")
+                return {}
+
+        # All retries exhausted
+        return {}
+
+    def get_all_categories_with_subcategories(self) -> Dict[str, Dict[str, str]]:
+        """
+        Fetch all categories and their subcategories.
+
+        Returns:
+            Dictionary mapping category codes to dictionaries of subcategories
+            Structure: {"pc": {"notebook": "Notebooky", "monitor": "LCD monitory", ...}, ...}
+        """
+        try:
+            categories = self.get_categories()
+            categories_with_subs = {}
+
+            for category_code in categories:
+                subcategories = self.get_subcategories(category_code)
+                categories_with_subs[category_code] = subcategories
+
+            return categories_with_subs
+
+        except Exception as e:
+            print(f"Error fetching all categories with subcategories: {e}")
+            return {}
+
     def save_results(self, items: List[BazosItem], output_file: str) -> None:
         """Save results to JSON file"""
         data = {

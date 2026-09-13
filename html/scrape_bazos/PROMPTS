@@ -2,9 +2,33 @@
 # PC NAS:
 scrape-bazos.exe search --category pc --keyword 'nas' --details-all
 
+Analyze data in attached json file
+ * If price field does not have value, check 'full_description' field and parse value e.g. Cena 27 €.
+ * provide list of NAS solutions items worth of money (also include link from url field)
+   and provide reason why you pick it
+ * if provided in description also list:
+    - CPU type, number cores and generations
+    - RAM size and ddr type
+    - STORAGE size
+    - if is suitable for running proxmox jellyfin encoding
 
 # PC HP:
  scrape-bazos.exe search --category pc --keyword 'hp prodesk' --keyword 'hp elitedesk'  --keyword 'hp engage'  --details-all
+
+ Analyze data in attached json file
+ * Categories items into prizes categories up to 100 Eur, 250 eur, 350Eur, 500 Eur plus.
+ * If price field does not have value, check 'full_description' field and parse value e.g. Cena 27 €.
+ * in each category list 5 items list of items worth of money (also include link from url field)
+   and provide reason why you pick it
+ * if provided in description also list:
+    - CPU type, number cores and generations
+    - RAM size and ddr type
+    - STORAGE size
+    - if is suitable for running proxmox jellyfin encoding
+
+
+# PC NOTAS
+scrape-bazos.exe search --category pc --keyword 'laptop' --keyword 'notebook'  --details-all
 
  Analyze data in attached json file
  * Categories items into prizes categories up to 100 Eur, 250 eur, 350Eur, 500 Eur plus.

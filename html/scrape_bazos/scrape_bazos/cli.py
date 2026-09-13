@@ -421,23 +421,176 @@ def search(category, keyword, price_from, price_to, location, radius, pages_get,
 
 
 @cli.command()
-def categories():
+@click.option(
+    "--show-subcategories",
+    "-s",
+    is_flag=True,
+    help="Show subcategories for each category (fetches from category pages)",
+)
+@click.option(
+    "--category",
+    "-c",
+    default=None,
+    help="Show subcategories for a specific category only (requires --show-subcategories)",
+)
+@click.option(
+    "--details-all",
+    "-da",
+    is_flag=True,
+    help="Show full URL for each subcategory (requires --show-subcategories)",
+)
+def categories(show_subcategories, category, details_all):
     """
-    Show available categories fetched from bazos.sk
+    Show available categories fetched from bazos.sk.
+
+    IMPROVED: Auto-detects grouped vs flat subcategories and displays them appropriately.
+
+    Examples:
+        scrape-bazos categories                              # List all main categories
+        scrape-bazos categories -s                           # List categories with subcategories
+        scrape-bazos categories -s -c pc                     # Show only PC category with its subcategories
+        scrape-bazos categories -s -c reality                # Show grouped categories (Predaj, Prenájom, etc.)
+        scrape-bazos categories -s -c reality -da            # Show grouped categories with full URLs
     """
     try:
-        click.echo("📂 Fetching available categories from bazos.sk...\n")
         scraper = BazosScraper()
-        categories_list = scraper.get_categories()
 
-        if not categories_list:
-            click.echo("❌ No categories found. Unable to fetch from bazos.sk.", err=True)
-            raise SystemExit(1)
+        if show_subcategories:
+            # Show categories with subcategories
+            if category:
+                # Show only specific category with subcategories
+                category = category.lower()
+                click.echo(f"📂 Fetching subcategories for '{category}' from bazos.sk...\n")
 
-        click.echo("📂 Available Categories:\n")
-        for topic, description in sorted(categories_list.items()):
-            click.echo(f"  {click.style(topic.ljust(15), fg='cyan')} → {description}")
-        click.echo(f"\n✅ Found {len(categories_list)} categories")
+                # IMPROVED: Try grouped first, fall back to flat
+                grouped = scraper.get_subcategories_grouped(category)
+
+                if grouped:
+                    # Display grouped structure
+                    click.echo(f"📂 Subcategories in '{click.style(category, fg='cyan')}' (grouped):\n")
+                    total_subcats = 0
+
+                    for group_id, group_data in sorted(grouped.items()):
+                        group_name = group_data.get("name", group_id)
+                        subcategories = group_data.get("subcategories", {})
+
+                        click.echo(f"  {click.style('📌 ' + group_name, fg='yellow')}")
+                        for subcat_path, subcat_name in sorted(subcategories.items()):
+                            # Show full path: group_id/subcat_id
+                            full_path = f"{group_id}/{subcat_path}"
+                            if details_all:
+                                # Show with full URL
+                                full_url = f"https://{category}.bazos.sk/{full_path}/"
+                                click.echo(f"      {click.style(full_path.ljust(25), fg='green')} → {subcat_name} {click.style(full_url, fg='blue')}")
+                            else:
+                                # Show without URL
+                                click.echo(f"      {click.style(full_path.ljust(25), fg='green')} → {subcat_name}")
+                        total_subcats += len(subcategories)
+
+                    click.echo(f"\n✅ Found {len(grouped)} group(s) with {total_subcats} total subcategories")
+                else:
+                    # Fallback to flat structure
+                    subcategories = scraper.get_subcategories(category)
+
+                    if not subcategories:
+                        click.echo(f"ℹ️  No subcategories found for category '{category}'", err=False)
+                        raise SystemExit(0)
+
+                    click.echo(f"📂 Subcategories in '{click.style(category, fg='cyan')}':\n")
+                    for subcat_path, subcat_name in sorted(subcategories.items()):
+                        if details_all:
+                            # Show with full URL
+                            full_url = f"https://{category}.bazos.sk/{subcat_path}/"
+                            click.echo(f"  {click.style(subcat_path.ljust(20), fg='green')} → {subcat_name} {click.style(full_url, fg='blue')}")
+                        else:
+                            # Show without URL
+                            click.echo(f"  {click.style(subcat_path.ljust(20), fg='green')} → {subcat_name}")
+                    click.echo(f"\n✅ Found {len(subcategories)} subcategories")
+            else:
+                # Show all categories with subcategories
+                click.echo("📂 Fetching all categories and subcategories from bazos.sk...\n")
+
+                # Get main categories first
+                categories_list = scraper.get_categories()
+                if not categories_list:
+                    click.echo("❌ No categories found. Unable to fetch from bazos.sk.", err=True)
+                    raise SystemExit(1)
+
+                click.echo("📂 Available Categories with Subcategories:\n")
+                total_subcategories = 0
+                failed_categories = []
+
+                # Fetch subcategories for each category with progress indicator
+                for i, (cat_code, cat_name) in enumerate(sorted(categories_list.items()), 1):
+                    click.echo(f"  {click.style(cat_code.ljust(15), fg='cyan')} → {cat_name}", nl=False)
+
+                    try:
+                        # IMPROVED: Try grouped first, fall back to flat
+                        grouped = scraper.get_subcategories_grouped(cat_code)
+
+                        if grouped:
+                            # Grouped structure
+                            click.echo()  # New line after category name
+                            for group_id, group_data in sorted(grouped.items()):
+                                group_name = group_data.get("name", group_id)
+                                subcategories = group_data.get("subcategories", {})
+                                click.echo(f"      {click.style('📌 ' + group_name, fg='yellow')}")
+                                for subcat_path, subcat_name in sorted(subcategories.items()):
+                                    # Show full path: group_id/subcat_id
+                                    full_path = f"{group_id}/{subcat_path}"
+                                    if details_all:
+                                        # Show with full URL
+                                        full_url = f"https://{cat_code}.bazos.sk/{full_path}/"
+                                        click.echo(f"          {click.style(full_path.ljust(20), fg='green')} → {subcat_name} {click.style(full_url, fg='blue')}")
+                                    else:
+                                        # Show without URL
+                                        click.echo(f"          {click.style(full_path.ljust(20), fg='green')} → {subcat_name}")
+                                total_subcategories += len(subcategories)
+                        else:
+                            # Flat structure
+                            subcategories = scraper.get_subcategories(cat_code)
+
+                            if subcategories:
+                                click.echo()  # New line after category name
+                                for subcat_path, subcat_name in sorted(subcategories.items()):
+                                    if details_all:
+                                        # Show with full URL
+                                        full_url = f"https://{cat_code}.bazos.sk/{subcat_path}/"
+                                        click.echo(f"      {click.style(subcat_path.ljust(18), fg='green')} → {subcat_name} {click.style(full_url, fg='blue')}")
+                                    else:
+                                        # Show without URL
+                                        click.echo(f"      {click.style(subcat_path.ljust(18), fg='green')} → {subcat_name}")
+                                total_subcategories += len(subcategories)
+                            else:
+                                click.echo(" (no subcategories)")
+
+                    except Exception as e:
+                        click.echo(f" {click.style('[TIMEOUT]', fg='yellow')}")
+                        failed_categories.append((cat_code, str(e)))
+
+                click.echo(f"\n✅ Found {len(categories_list)} categories with {total_subcategories} total subcategories")
+
+                if failed_categories:
+                    click.echo(f"\n⚠️  {len(failed_categories)} categor{'y' if len(failed_categories) == 1 else 'ies'} timed out:")
+                    for cat_code, error in failed_categories:
+                        click.echo(f"   - {cat_code}: {error}")
+                    click.echo(f"\n💡 Tip: Try fetching individual categories with: scrape-bazos categories -s -c {failed_categories[0][0]}")
+
+        else:
+            # Show only main categories (original behavior)
+            click.echo("📂 Fetching available categories from bazos.sk...\n")
+            categories_list = scraper.get_categories()
+
+            if not categories_list:
+                click.echo("❌ No categories found. Unable to fetch from bazos.sk.", err=True)
+                raise SystemExit(1)
+
+            click.echo("📂 Available Categories:\n")
+            for topic, description in sorted(categories_list.items()):
+                click.echo(f"  {click.style(topic.ljust(15), fg='cyan')} → {description}")
+            click.echo(f"\n✅ Found {len(categories_list)} categories")
+            click.echo(f"💡 Tip: Use 'scrape-bazos categories -s' to see subcategories")
+
         click.echo()
 
     except Exception as e:
