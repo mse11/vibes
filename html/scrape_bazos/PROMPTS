@@ -8,13 +8,24 @@ scrape-bazos.exe search \
 
 Analyze data in attached json file
  * If price field does not have value, check 'full_description' field and parse value e.g. Cena 27 €.
- * provide list of NAS solutions items worth of money (also include link from url field)
+ * provide list of NAS solutions items worth of money
    and provide reason why you pick it
  * if provided in description also list:
     - CPU type, number cores and generations
     - RAM size and ddr type
     - STORAGE size
     - if is suitable for running proxmox jellyfin encoding
+ * IMPORTANT: include link from 'item_url' field
+
+Structure example:
+
+Product Name / Model (link to product)
+Price: [Amount]
+Reason for Selection: [Explanation]
+CPU: [Processor Details]
+RAM: [Memory]
+Storage: [Capacity & Type]
+Proxmox / Jellyfin: [Compatibility assessment]
 
 ###################################################
 # PC PC (hp mini pc)
@@ -27,15 +38,26 @@ Analyze data in attached json file
     --details-all
 
  Analyze data in attached json file
- * Categories items into prizes categories up to 100 Eur, 250 eur, 350Eur, 500 Eur plus.
+ * Categories items into prizes categories up to 150 Eur, 250 eur, 350Eur, 500 Eur plus.
  * If price field does not have value, check 'full_description' field and parse value e.g. Cena 27 €.
- * in each category list 5 items list of items worth of money (also include link from url field)
+ * in each category list 5 items list of items worth of money
    and provide reason why you pick it
  * if provided in description also list:
     - CPU type, number cores and generations
     - RAM size and ddr type
     - STORAGE size
     - if is suitable for running proxmox jellyfin encoding
+ * IMPORTANT: include link from 'item_url' field
+
+Structure example:
+
+Product Name / Model (link to product)
+Price: [Amount]
+Reason for Selection: [Explanation]
+CPU: [Processor Details]
+RAM: [Memory]
+Storage: [Capacity & Type]
+Proxmox / Jellyfin: [Compatibility assessment]
 
 
 ###################################################
@@ -48,13 +70,25 @@ scrape-bazos.exe search \
  Analyze data in attached json file
  * Categories items into prizes categories up to 100 Eur, 250 eur, 350Eur, 500 Eur plus.
  * If price field does not have value, check 'full_description' field and parse value e.g. Cena 27 €.
- * in each category list 5 items list of items worth of money (also include link from url field)
+ * in each category list 5 items list of items worth of money
    and provide reason why you pick it
  * if provided in description also list:
     - CPU type, number cores and generations
     - RAM size and ddr type
     - STORAGE size
     - if is suitable for running proxmox jellyfin encoding
+ * IMPORTANT: include link from 'item_url' field
+
+Structure example:
+
+Product Name / Model (link to product)
+Price: [Amount]
+Reason for Selection: [Explanation]
+CPU: [Processor Details]
+RAM: [Memory]
+Storage: [Capacity & Type]
+Proxmox / Jellyfin: [Compatibility assessment]
+
 
 ###################################################
 # PC NOTAS (4 SLOTS)
@@ -72,3 +106,33 @@ scrape-bazos.exe search \
     --keyword 'MSI CreatorPro' \
     --keyword 'MSI Titan GT77' \
     --details-all
+
+###################################################
+# PC MEMORY
+###################################################
+scrape-bazos.exe search \
+    --category pc --sub-category 'pamet'
+    --keyword 'DDR4' \
+    --details-all
+
+ Analyze data in attached json file
+ * Categories items into prizes categories up to 100 Eur, 250 eur, 350Eur, 500 Eur plus.
+ * If price field does not have value, check 'full_description' field and parse value e.g. Cena 27 €.
+ * in each category list 5 items list of items worth of money
+   and provide reason why you pick it
+ * if provided in description also list:
+    - CPU type, number cores and generations
+    - RAM size and ddr type
+    - STORAGE size
+    - if is suitable for running proxmox jellyfin encoding
+ * IMPORTANT: include link from 'item_url' field
+
+Structure example:
+
+Product Name / Model (link to product)
+Price: [Amount]
+Reason for Selection: [Explanation]
+CPU: [Processor Details]
+RAM: [Memory]
+Storage: [Capacity & Type]
+Proxmox / Jellyfin: [Compatibility assessment]

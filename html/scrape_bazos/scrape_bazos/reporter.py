@@ -714,7 +714,7 @@ class HTMLReportGenerator:
         image_map: Optional[dict] = None,
         truncate_descriptions: bool = False,
     ) -> None:
-        """Generate dynamic HTML report with live filtering capabilities"""
+        """Generate dynamic HTML report with live filtering and cascading keyword search filters"""
 
         # Prepare data for JavaScript
         items_data = self._prepare_items_data(items, include_images, image_map)
@@ -814,6 +814,165 @@ class HTMLReportGenerator:
                 opacity: 1;
                 font-weight: 700;
                 color: #fff;
+            }
+
+            /* ===== NEW: Cascading Filters Styles ===== */
+            .filters-management-section {
+                background: rgba(0,0,0,0.2);
+                padding: 12px;
+                margin-top: 15px;
+                border-radius: 3px;
+                border: 1px solid rgba(255,255,255,0.2);
+            }
+
+            .filters-management-title {
+                font-weight: 600;
+                font-size: 0.75em;
+                color: rgba(255,255,255,0.7);
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+                margin-bottom: 10px;
+                display: flex;
+                align-items: center;
+                gap: 6px;
+            }
+
+            .filters-list {
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+                margin-bottom: 10px;
+            }
+
+            .filter-row {
+                display: flex;
+                gap: 8px;
+                align-items: center;
+                background: rgba(255,255,255,0.05);
+                padding: 8px;
+                border-radius: 3px;
+                border: 1px solid rgba(255,255,255,0.1);
+                flex-wrap: wrap;
+            }
+
+            .filter-row-number {
+                font-weight: 600;
+                font-size: 0.75em;
+                color: #0066cc;
+                min-width: 20px;
+                text-align: center;
+            }
+
+            .filter-key-select {
+                flex: 1;
+                min-width: 100px;
+                padding: 6px 8px;
+                border: 1px solid rgba(255,255,255,0.3);
+                border-radius: 3px;
+                font-size: 0.85em;
+                font-family: inherit;
+                background: rgba(255,255,255,0.1);
+                color: white;
+                cursor: pointer;
+                transition: all 0.2s;
+            }
+
+            .filter-key-select option {
+                background: #333;
+                color: white;
+            }
+
+            .filter-key-select:focus {
+                outline: none;
+                border-color: #fff;
+                background: rgba(255,255,255,0.2);
+            }
+
+            .filter-value-input {
+                flex: 2;
+                min-width: 120px;
+                padding: 6px 10px;
+                border: 1px solid rgba(255,255,255,0.3);
+                border-radius: 3px;
+                font-size: 0.85em;
+                font-family: inherit;
+                background: rgba(255,255,255,0.1);
+                color: white;
+                transition: all 0.2s;
+            }
+
+            .filter-value-input::placeholder {
+                color: rgba(255,255,255,0.5);
+            }
+
+            .filter-value-input:focus {
+                outline: none;
+                border-color: #fff;
+                background: rgba(255,255,255,0.2);
+                box-shadow: 0 0 8px rgba(255, 255, 255, 0.3);
+            }
+
+            .filter-delete-btn {
+                padding: 5px 8px;
+                background: rgba(255, 107, 107, 0.8);
+                color: white;
+                border: 1px solid rgba(255, 107, 107, 1);
+                border-radius: 3px;
+                cursor: pointer;
+                font-weight: 600;
+                font-size: 0.75em;
+                transition: all 0.2s;
+                white-space: nowrap;
+            }
+
+            .filter-delete-btn:hover {
+                background: #ff5252;
+                border-color: #ff5252;
+                transform: scale(1.05);
+            }
+
+            .filters-actions {
+                display: flex;
+                gap: 8px;
+                flex-wrap: wrap;
+            }
+
+            .add-filter-btn {
+                padding: 6px 12px;
+                background: #0066cc;
+                color: white;
+                border: 1px solid #0066cc;
+                border-radius: 3px;
+                cursor: pointer;
+                font-weight: 600;
+                font-size: 0.85em;
+                transition: all 0.2s;
+                white-space: nowrap;
+            }
+
+            .add-filter-btn:hover {
+                background: #0052a3;
+                border-color: #0052a3;
+                transform: scale(1.05);
+            }
+
+            .clear-all-filters-btn {
+                padding: 6px 12px;
+                background: rgba(255, 107, 107, 0.8);
+                color: white;
+                border: 1px solid rgba(255, 107, 107, 1);
+                border-radius: 3px;
+                cursor: pointer;
+                font-weight: 600;
+                font-size: 0.85em;
+                transition: all 0.2s;
+                white-space: nowrap;
+            }
+
+            .clear-all-filters-btn:hover {
+                background: #ff5252;
+                border-color: #ff5252;
+                transform: scale(1.05);
             }
 
             .toggle-description-btn {
@@ -1387,6 +1546,30 @@ class HTMLReportGenerator:
                 .item-title {
                     min-width: unset;
                 }
+
+                .filter-row {
+                    flex-direction: column;
+                }
+
+                .filter-key-select,
+                .filter-value-input {
+                    width: 100%;
+                    min-width: unset;
+                }
+
+                .filters-management-section {
+                    margin-top: 10px;
+                    padding: 10px;
+                }
+
+                .filters-actions {
+                    width: 100%;
+                }
+
+                .add-filter-btn,
+                .clear-all-filters-btn {
+                    flex: 1;
+                }
             }
         </style>
         """
@@ -1412,11 +1595,6 @@ class HTMLReportGenerator:
                         </div>
 
                         <div class="filters-container">
-                            <div class="filter-group">
-                                <label class="filter-label">🔍 Search</label>
-                                <input type="text" id="textSearch" class="filter-input" placeholder="Text...">
-                            </div>
-
                             <div class="filter-group">
                                 <label class="filter-label">💰 Price</label>
                                 <div class="price-inputs">
@@ -1466,6 +1644,20 @@ class HTMLReportGenerator:
                                 <strong id="currentCount">0</strong> / <strong id="totalItems">0</strong>
                             </div>
                         </div>
+
+                        <!-- NEW: Cascading Keyword Filters Section -->
+                        <div class="filters-management-section">
+                            <div class="filters-management-title">
+                                🔎 Cascading Keyword Filters
+                            </div>
+                            <div class="filters-list" id="filtersList">
+                                <!-- Filter rows will be added here by JavaScript -->
+                            </div>
+                            <div class="filters-actions">
+                                <button id="addFilterBtn" class="add-filter-btn">+ Add Filter</button>
+                                <button id="clearAllFiltersBtn" class="clear-all-filters-btn">Clear All Filters</button>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -1486,16 +1678,22 @@ class HTMLReportGenerator:
             <script>
                 const allData = {items_json};
                 let filteredData = allData.items.slice();
-                let currentSort = null; // 'priceAsc', 'priceDesc', 'locationAsc', 'locationDesc'
+                let currentSort = null;
                 let isDescriptionTruncated = {str(truncate_descriptions).lower()};
                 let currentImages = [];
                 let currentImageIndex = 0;
 
+                // NEW: Cascading Filters State
+                let filters = [
+                    {{ key: 'title', value: '' }}  // Default filter
+                ];
+                const AVAILABLE_KEYS = ['title', 'description', 'full_description', 'price', 'location'];
+
+                // ===== IMAGE MODAL FUNCTIONS =====
                 function openImage(src) {{
                     const modal = document.getElementById('imageModal');
                     const img = document.getElementById('modalImg');
 
-                    // Find all images in current item
                     const clicked = event.target;
                     const itemDiv = clicked.closest('.item');
                     const thumbnails = itemDiv.querySelectorAll('.item-thumbnail');
@@ -1506,7 +1704,6 @@ class HTMLReportGenerator:
                     modal.classList.add('show');
                     updateImageNavigation();
 
-                    // Add keyboard navigation
                     document.addEventListener('keydown', handleImageKeyboard);
                 }}
 
@@ -1555,6 +1752,7 @@ class HTMLReportGenerator:
                     }}
                 }}
 
+                // ===== UTILITY FUNCTIONS =====
                 function getImages(item) {{
                     if (item.image_urls && item.image_urls.length > 0) {{
                         return item.image_urls;
@@ -1574,8 +1772,120 @@ class HTMLReportGenerator:
                     return parseFloat(cleaned) || 0;
                 }}
 
+                // ===== NEW: CASCADING FILTER FUNCTIONS =====
+                function saveFiltersToStorage() {{
+                    try {{
+                        localStorage.setItem('cascadingFilters', JSON.stringify(filters));
+                    }} catch(e) {{
+                        // localStorage not available
+                    }}
+                }}
+
+                function loadFiltersFromStorage() {{
+                    try {{
+                        const stored = localStorage.getItem('cascadingFilters');
+                        if (stored) {{
+                            filters = JSON.parse(stored);
+                        }}
+                    }} catch(e) {{
+                        // localStorage not available
+                        filters = [{{ key: 'title', value: '' }}];
+                    }}
+                }}
+
+                function renderFilterRows() {{
+                    const filtersList = document.getElementById('filtersList');
+                    filtersList.innerHTML = '';
+
+                    filters.forEach((filter, index) => {{
+                        const filterRow = document.createElement('div');
+                        filterRow.className = 'filter-row';
+                        filterRow.innerHTML = `
+                            <div class="filter-row-number">F${{index + 1}}</div>
+                            <select class="filter-key-select" data-index="${{index}}">
+                                ${{AVAILABLE_KEYS.map(key => `<option value="${{key}}" ${{filter.key === key ? 'selected' : ''}}>${{key}}</option>`).join('')}}
+                            </select>
+                            <input type="text" class="filter-value-input" data-index="${{index}}" placeholder="Keyword..." value="${{escapeHtml(filter.value)}}">
+                            <button class="filter-delete-btn" data-index="${{index}}" title="Delete this filter">✕ Delete</button>
+                        `;
+
+                        filterRow.querySelector('.filter-key-select').addEventListener('change', (e) => {{
+                            filters[index].key = e.target.value;
+                            saveFiltersToStorage();
+                            applyAllFilters();
+                        }});
+
+                        filterRow.querySelector('.filter-value-input').addEventListener('input', (e) => {{
+                            filters[index].value = e.target.value;
+                            saveFiltersToStorage();
+                            applyAllFilters();
+                        }});
+
+                        filterRow.querySelector('.filter-delete-btn').addEventListener('click', () => {{
+                            removeFilter(index);
+                        }});
+
+                        filtersList.appendChild(filterRow);
+                    }});
+                }}
+
+                function addFilter() {{
+                    filters.push({{ key: 'title', value: '' }});
+                    saveFiltersToStorage();
+                    renderFilterRows();
+                    applyAllFilters();
+                }}
+
+                function removeFilter(index) {{
+                    filters.splice(index, 1);
+                    // Always keep at least one filter
+                    if (filters.length === 0) {{
+                        filters.push({{ key: 'title', value: '' }});
+                    }}
+                    saveFiltersToStorage();
+                    renderFilterRows();
+                    applyAllFilters();
+                }}
+
+                function getFilteredData() {{
+                    // Get base filters
+                    const textSearch = document.getElementById('textSearch')?.value.toLowerCase() || '';
+                    const priceFrom = parseFloat(document.getElementById('priceFrom').value) || 0;
+                    const priceTo = parseFloat(document.getElementById('priceTo').value) || Infinity;
+                    const locationFilter = document.getElementById('locationFilter')?.value.toLowerCase() || '';
+
+                    // Start with all items
+                    let results = allData.items.slice();
+
+                    // Apply cascading keyword filters
+                    for (let i = 0; i < filters.length; i++) {{
+                        const filter = filters[i];
+                        if (!filter.value.trim()) continue; // Skip empty filters
+
+                        results = results.filter(item => {{
+                            const fieldValue = String(item[filter.key] || '').toLowerCase();
+                            return fieldValue.includes(filter.value.toLowerCase());
+                        }});
+                    }}
+
+                    // Apply price filter
+                    results = results.filter(item => {{
+                        const price = parsePrice(item.price);
+                        return price >= priceFrom && price <= priceTo;
+                    }});
+
+                    // Apply location filter
+                    if (locationFilter) {{
+                        results = results.filter(item => {{
+                            const itemLocation = (item.location || '').split(',')[0].toLowerCase().trim();
+                            return itemLocation.includes(locationFilter);
+                        }});
+                    }}
+
+                    return results;
+                }}
+
                 function sortByPrice(ascending) {{
-                    // Toggle: if already sorted by price, toggle off
                     if ((currentSort === 'priceAsc' && ascending) || (currentSort === 'priceDesc' && !ascending)) {{
                         currentSort = null;
                     }} else {{
@@ -1590,7 +1900,6 @@ class HTMLReportGenerator:
                 }}
 
                 function sortByLocation(ascending) {{
-                    // Toggle: if already sorted by location, toggle off
                     if ((currentSort === 'locationAsc' && ascending) || (currentSort === 'locationDesc' && !ascending)) {{
                         currentSort = null;
                     }} else {{
@@ -1635,7 +1944,6 @@ class HTMLReportGenerator:
                         }}
                     }});
 
-                    // Update button appearance
                     if (isDescriptionTruncated) {{
                         button.classList.remove('full');
                         button.textContent = '📄 Truncate';
@@ -1644,39 +1952,11 @@ class HTMLReportGenerator:
                         button.textContent = '📄 Full';
                     }}
 
-                    // Save preference to localStorage
                     try {{
                         localStorage.setItem('descriptionTruncated', isDescriptionTruncated);
                     }} catch(e) {{
                         // localStorage not available
                     }}
-                }}
-
-                function getFilteredData() {{
-                    const textSearch = document.getElementById('textSearch').value.toLowerCase();
-                    const priceFrom = parseFloat(document.getElementById('priceFrom').value) || 0;
-                    const priceTo = parseFloat(document.getElementById('priceTo').value) || Infinity;
-                    const locationFilter = document.getElementById('locationFilter').value.toLowerCase();
-
-                    return allData.items.filter(item => {{
-                        // Text search
-                        if (textSearch) {{
-                            const searchText = (item.title + ' ' + item.description + ' ' + item.full_description).toLowerCase();
-                            if (!searchText.includes(textSearch)) return false;
-                        }}
-
-                        // Price filter
-                        const price = parsePrice(item.price);
-                        if (price < priceFrom || price > priceTo) return false;
-
-                        // Location filter
-                        if (locationFilter) {{
-                            const itemLocation = (item.location || '').split(',')[0].toLowerCase().trim();
-                            if (!itemLocation.includes(locationFilter)) return false;
-                        }}
-
-                        return true;
-                    }});
                 }}
 
                 function applySorting(data) {{
@@ -1692,7 +1972,7 @@ class HTMLReportGenerator:
                     return data;
                 }}
 
-                function applyFilters() {{
+                function applyAllFilters() {{
                     filteredData = getFilteredData();
                     filteredData = applySorting(filteredData);
                     renderItems();
@@ -1765,13 +2045,12 @@ class HTMLReportGenerator:
                         container.innerHTML += itemHTML;
                     }});
 
-                    // Update position counter after rendering
                     updatePositionCounter();
                 }}
 
                 function clearAllFilters() {{
-                    // Reset all filter inputs
-                    document.getElementById('textSearch').value = '';
+                    // Reset filter input
+                    document.getElementById('textSearch')?.value ?? '';
                     document.getElementById('priceFrom').value = '0';
                     document.getElementById('priceTo').value = '{max_price}';
                     document.getElementById('locationFilter').value = '';
@@ -1780,31 +2059,29 @@ class HTMLReportGenerator:
                     currentSort = null;
                     updateSortButtons();
 
-                    // Reapply filters (which will be empty now) and update counter
-                    filteredData = getFilteredData();
-                    filteredData = applySorting(filteredData);
-                    renderItems();
-                    updateCounter();
+                    // Reset cascading filters
+                    filters = [{{ key: 'title', value: '' }}];
+                    saveFiltersToStorage();
+                    renderFilterRows();
+
+                    // Reapply filters
+                    applyAllFilters();
                 }}
 
-                // Event listeners for filters
-                document.getElementById('textSearch').addEventListener('input', applyFilters);
-                document.getElementById('priceFrom').addEventListener('input', applyFilters);
-                document.getElementById('priceTo').addEventListener('input', applyFilters);
-                document.getElementById('locationFilter').addEventListener('change', applyFilters);
+                // ===== EVENT LISTENERS =====
+                document.getElementById('priceFrom').addEventListener('input', applyAllFilters);
+                document.getElementById('priceTo').addEventListener('input', applyAllFilters);
+                document.getElementById('locationFilter').addEventListener('change', applyAllFilters);
                 document.getElementById('clearFilters').addEventListener('click', clearAllFilters);
 
-                // Event listeners for sorting
                 document.getElementById('sortPriceAsc').addEventListener('click', () => sortByPrice(true));
                 document.getElementById('sortPriceDesc').addEventListener('click', () => sortByPrice(false));
                 document.getElementById('sortLocationAsc').addEventListener('click', () => sortByLocation(true));
                 document.getElementById('sortLocationDesc').addEventListener('click', () => sortByLocation(false));
 
-                // Event listener for description toggle
                 const descToggleBtn = document.getElementById('descriptionToggle');
                 descToggleBtn.addEventListener('click', toggleDescriptionTruncation);
 
-                // Initialize button state
                 if (!isDescriptionTruncated) {{
                     descToggleBtn.classList.add('full');
                     descToggleBtn.textContent = '📄 Full';
@@ -1812,19 +2089,16 @@ class HTMLReportGenerator:
                     descToggleBtn.textContent = '📄 Truncate';
                 }}
 
-                // Modal click outside to close
                 document.getElementById('imageModal').addEventListener('click', function(e) {{
                     if (e.target === this) {{
                         closeModal();
                     }}
                 }});
 
-                // Track scroll position for filtered items
                 window.addEventListener('scroll', function() {{
                     updatePositionCounter();
                 }});
 
-                // Thumbnail size slider
                 const sizeSlider = document.getElementById('sizeSlider');
                 const sizeDisplay = document.getElementById('sizeDisplay');
 
@@ -1834,7 +2108,13 @@ class HTMLReportGenerator:
                     sizeDisplay.textContent = size + 'px';
                 }});
 
+                // NEW: Cascading Filter Event Listeners
+                document.getElementById('addFilterBtn').addEventListener('click', addFilter);
+                document.getElementById('clearAllFiltersBtn').addEventListener('click', clearAllFilters);
+
                 // Initialize
+                loadFiltersFromStorage();
+                renderFilterRows();
                 renderItems();
                 updateCounter();
             </script>
@@ -1845,4 +2125,4 @@ class HTMLReportGenerator:
         with open(output_file, "w", encoding="utf-8") as f:
             f.write(html)
 
-        print(f"✓ Dynamic HTML report saved to: {output_file}")
+        print(f"✓ Dynamic HTML report with cascading filters saved to: {output_file}")
