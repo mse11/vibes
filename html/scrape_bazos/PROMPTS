@@ -1,5 +1,6 @@
-
-# PC NAS:
+###################################################
+# PC NAS
+###################################################
 scrape-bazos.exe search --category pc --keyword 'nas' --details-all
 
 Analyze data in attached json file
@@ -12,8 +13,15 @@ Analyze data in attached json file
     - STORAGE size
     - if is suitable for running proxmox jellyfin encoding
 
-# PC HP:
- scrape-bazos.exe search --category pc --keyword 'hp prodesk' --keyword 'hp elitedesk'  --keyword 'hp engage'  --details-all
+###################################################
+# PC PC (hp mini pc)
+###################################################
+ scrape-bazos.exe search \
+    --category pc --sub-category 'pc' \
+    --keyword 'hp prodesk' \
+    --keyword 'hp elitedesk' \
+    --keyword 'hp engage' \
+    --details-all
 
  Analyze data in attached json file
  * Categories items into prizes categories up to 100 Eur, 250 eur, 350Eur, 500 Eur plus.
@@ -27,8 +35,12 @@ Analyze data in attached json file
     - if is suitable for running proxmox jellyfin encoding
 
 
+###################################################
 # PC NOTAS
-scrape-bazos.exe search --category pc --keyword 'laptop' --keyword 'notebook'  --details-all
+###################################################
+scrape-bazos.exe search \
+    --category 'pc' --sub-category 'notebook' \
+    --details-all
 
  Analyze data in attached json file
  * Categories items into prizes categories up to 100 Eur, 250 eur, 350Eur, 500 Eur plus.
@@ -40,3 +52,20 @@ scrape-bazos.exe search --category pc --keyword 'laptop' --keyword 'notebook'  -
     - RAM size and ddr type
     - STORAGE size
     - if is suitable for running proxmox jellyfin encoding
+
+###################################################
+# PC NOTAS (4 SLOTS)
+###################################################
+scrape-bazos.exe search \
+    --category 'pc' --sub-category 'notebook' \
+    --keyword 'ZBook Fury' \
+    --keyword 'ThinkPad P17' \
+    --keyword 'ThinkPad P16' \
+    --keyword 'ThinkPad P15' \
+    --keyword 'ThinkPad P5' \
+    --keyword 'ThinkPad P7' \
+    --keyword 'Dell Precision 75' \
+    --keyword 'Dell Precision 77' \
+    --keyword 'MSI CreatorPro' \
+    --keyword 'MSI Titan GT77' \
+    --details-all

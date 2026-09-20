@@ -1300,6 +1300,12 @@ class HTMLReportGenerator:
 
                             <button id="descriptionToggle" class="toggle-description-btn" title="Toggle description truncation">📄 Truncate</button>
 
+                            <div class="slider-container">
+                                <span class="slider-label">Thumbnails:</span>
+                                <input type="range" min="40" max="300" value="150" class="slider" id="sizeSlider">
+                                <span class="thumb-size-display" id="sizeDisplay">150px</span>
+                            </div>
+
                             <div class="item-counter">
                                 <strong id="currentCount">0</strong> / <strong id="totalItems">0</strong>
                             </div>
@@ -1602,6 +1608,16 @@ class HTMLReportGenerator:
                 // Track scroll position for filtered items
                 window.addEventListener('scroll', function() {{
                     updatePositionCounter();
+                }});
+
+                // Thumbnail size slider
+                const sizeSlider = document.getElementById('sizeSlider');
+                const sizeDisplay = document.getElementById('sizeDisplay');
+
+                sizeSlider.addEventListener('input', function(e) {{
+                    const size = e.target.value;
+                    document.documentElement.style.setProperty('--thumb-size', size + 'px');
+                    sizeDisplay.textContent = size + 'px';
                 }});
 
                 // Initialize
