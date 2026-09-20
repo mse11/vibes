@@ -170,14 +170,23 @@ def cli():
 )
 @click.option(
     "--prompt-template",
+    multiple=True,
     type=click.Choice([t.value for t in PromptType]),
-    default=None,
+    default=(),
     help=(
         "Also dump a matching LLM analysis prompt (see 'prompt') as a "
         ".md file alongside the results, e.g. generated/<output-name>.md. "
-        "Must name an existing preset (pc, notebook, pamat, pamat-sodimm, "
-        "pamat-udimm, pamat-rdimm, disk, disk-hdd, disk-ssd); 'custom' has "
-        "no fixed preset content and is skipped with a warning."
+        "Repeatable -- pass it more than once (e.g. --prompt-template pamat "
+        "--prompt-template disk-ssd) to render several prompts from the "
+        "same scraped results, so one JSON/HTML source file can drive "
+        "several separate LLM analysis passes. Each additional preset gets "
+        "its own generated/<output-name>_<template>.md file; a single "
+        "--prompt-template keeps the original, unsuffixed "
+        "generated/<output-name>.md name. Repeating the same value is "
+        "de-duplicated. Must name an existing preset (pc, notebook, pamat, "
+        "pamat-sodimm, pamat-udimm, pamat-rdimm, disk, disk-hdd, "
+        "disk-ssd); 'custom' has no fixed preset content and is skipped "
+        "with a warning."
     ),
 )
 def search(category, keyword, price_from, price_to, location, radius, sub_category, pages_get, output, format, timeout, max_retries, retry_delay, display, pages_count, details_all, no_images, download_images, images_dir, truncate_descriptions, prompt_template):
@@ -193,6 +202,15 @@ def search(category, keyword, price_from, price_to, location, radius, sub_catego
     Default format is 'html_dynamic' which generates an interactive HTML report
     with filtering, sorting, and search capabilities. Use --format to change
     to json (data export), csv, table, or static html.
+
+    MULTIPLE PROMPT TEMPLATES:
+    --prompt-template can be given more than once. All requested prompts are
+    rendered from the same single scrape/results file (the "common data"),
+    each as its own .md file, so an LLM can be run over the one source file
+    once per prompt to produce more/differently-targeted results without
+    re-scraping. A single --prompt-template keeps writing the original
+    unsuffixed <output-name>.md; two or more get <output-name>_<template>.md
+    each.
 
     Examples:
 
@@ -230,6 +248,11 @@ def search(category, keyword, price_from, price_to, location, radius, sub_catego
 
         # Also dump a matching LLM prompt (generated/bazos_report_dynamic_YYYYMMDD_pc_pamet_DDR4.md)
         scrape-bazos search --category pc --sub-category pamet --keyword "DDR4" --prompt-template pamat
+
+        # Repeat --prompt-template to get several prompts from ONE scrape, so the
+        # LLM can produce more/differently-targeted results from the same source
+        # data (writes ..._pamat.md and ..._disk-ssd.md next to the one JSON/HTML)
+        scrape-bazos search --category pc --keyword "DDR4" --prompt-template pamat --prompt-template disk-ssd
     """
     try:
         # Validate HTML-specific options
@@ -538,18 +561,41 @@ def search(category, keyword, price_from, price_to, location, radius, sub_catego
             if download_images and not no_images:
                 click.echo(f"🖼️  Images saved to: {click.style(images_dir, bold=True)}")
 
-        # Optionally also dump a matching LLM analysis prompt, named after
-        # the results file (e.g. generated/bazos_report_dynamic_YYYYMMDD_pc_pamet_DDR4.md)
+        # Optionally also dump one or more matching LLM analysis prompts,
+        # named after the results file (e.g.
+        # generated/bazos_report_dynamic_YYYYMMDD_pc_pamet_DDR4.md). This is
+        # what lets one scrape ("common data") drive several separate LLM
+        # analysis passes: --prompt-template is repeatable, and each
+        # requested preset renders its own .md next to the one results file.
         if prompt_template:
-            template_type = PromptType(prompt_template)
-            if template_type is PromptType.CUSTOM:
-                click.echo(
-                    "⚠️  --prompt-template custom has no preset content; "
-                    "use 'scrape-bazos prompt --type custom ...' directly to build one.",
-                    err=False,
-                )
-            else:
-                prompt_output = Path(output).with_suffix(".md").as_posix()
+            # De-duplicate while preserving the order given on the command
+            # line, so passing the same value twice only writes it once.
+            requested_templates = list(dict.fromkeys(prompt_template))
+            non_custom_templates = [
+                t for t in requested_templates if t != PromptType.CUSTOM.value
+            ]
+            # Only suffix filenames with their template name when more than
+            # one renderable (non-custom) prompt was requested -- a single
+            # template keeps the original, unsuffixed name for backwards
+            # compatibility (e.g. generated/bazos_report_dynamic_pc_pamet_DDR4.md).
+            suffix_filenames = len(non_custom_templates) > 1
+
+            for template_value in requested_templates:
+                template_type = PromptType(template_value)
+                if template_type is PromptType.CUSTOM:
+                    click.echo(
+                        "⚠️  --prompt-template custom has no preset content; "
+                        "use 'scrape-bazos prompt --type custom ...' directly to build one.",
+                        err=False,
+                    )
+                    continue
+
+                if suffix_filenames:
+                    base = Path(output).with_suffix("").as_posix()
+                    prompt_output = f"{base}_{template_type.value}.md"
+                else:
+                    prompt_output = Path(output).with_suffix(".md").as_posix()
+
                 with open(prompt_output, "w", encoding="utf-8") as f:
                     f.write(render_prompt(get_preset(template_type)))
                 click.echo(f"📝 Prompt saved to: {click.style(prompt_output, bold=True)}")
