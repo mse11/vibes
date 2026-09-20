@@ -51,12 +51,21 @@ scrape-bazos.exe search \
     --details-all
 
 ###################################################
-# QUERY - PC MEMORY UDIMM
+# QUERY - PC MEMORY DDR4 UDIMM + SODIMM
 ###################################################
 scrape-bazos.exe search \
     --category pc --sub-category 'pamet' \
     --keyword 'DDR4' \
-     --prompt-template pamat-udimm \
+    --prompt-template pamat-udimm \
+    --details-all
+
+###################################################
+# QUERY - PC MEMORY DDR4 SODIMM
+###################################################
+scrape-bazos.exe search \
+    --category pc --sub-category 'pamet' \
+    --keyword 'DDR4' \
+    --prompt-template pamat-sodimm \
     --details-all
 
 ###################################################

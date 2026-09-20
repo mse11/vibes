@@ -6,6 +6,7 @@ import click
 import csv
 import json
 import re
+from datetime import datetime
 from pathlib import Path
 from .scraper import BazosScraper
 from .reporter import HTMLReportGenerator
@@ -105,7 +106,7 @@ def cli():
     "--output",
     default="",
     type=str,
-    help="Output filename (default: bazos_results_<category>_<keyword>.json). A bare filename is written under generated/; give a path to save elsewhere.",
+    help="Output filename (default: bazos_results_<YYYYMMDD>_<category>_<keyword>.json). A bare filename is written under generated/; give a path to save elsewhere.",
 )
 @click.option(
     "--format",
@@ -227,7 +228,7 @@ def search(category, keyword, price_from, price_to, location, radius, sub_catego
 
         scrape-bazos search --category pc --keyword "nas" --pages-get 2 --details-all --display
 
-        # Also dump a matching LLM prompt (generated/bazos_report_dynamic_pc_pamet_DDR4.md)
+        # Also dump a matching LLM prompt (generated/bazos_report_dynamic_YYYYMMDD_pc_pamet_DDR4.md)
         scrape-bazos search --category pc --sub-category pamet --keyword "DDR4" --prompt-template pamat
     """
     try:
@@ -335,16 +336,21 @@ def search(category, keyword, price_from, price_to, location, radius, sub_catego
             # Build filename with optional subcategory
             category_part = f"{safe_category}_{safe_subcategory}" if safe_subcategory else safe_category
 
+            # Stamp the filename with today's date (YYYYMMDD) so repeated
+            # searches for the same category/keyword don't overwrite each
+            # other's output across days.
+            timestamp = datetime.now().strftime("%Y%m%d")
+
             if format == "html":
-                output = f"bazos_report_{category_part}_{keywords_str}.html"
+                output = f"bazos_report_{timestamp}_{category_part}_{keywords_str}.html"
             elif format == "html_dynamic":
-                output = f"bazos_report_dynamic_{category_part}_{keywords_str}.html"
+                output = f"bazos_report_dynamic_{timestamp}_{category_part}_{keywords_str}.html"
             elif format == "csv":
-                output = f"bazos_results_{category_part}_{keywords_str}.csv"
+                output = f"bazos_results_{timestamp}_{category_part}_{keywords_str}.csv"
             elif format == "table":
-                output = f"bazos_results_{category_part}_{keywords_str}.txt"
+                output = f"bazos_results_{timestamp}_{category_part}_{keywords_str}.txt"
             else:  # json
-                output = f"bazos_results_{category_part}_{keywords_str}.json"
+                output = f"bazos_results_{timestamp}_{category_part}_{keywords_str}.json"
 
         # All output (auto-named or an explicit bare filename) lands under
         # generated/ unless the caller already qualified it with a directory
@@ -533,7 +539,7 @@ def search(category, keyword, price_from, price_to, location, radius, sub_catego
                 click.echo(f"🖼️  Images saved to: {click.style(images_dir, bold=True)}")
 
         # Optionally also dump a matching LLM analysis prompt, named after
-        # the results file (e.g. generated/bazos_report_dynamic_pc_pamet_DDR4.md)
+        # the results file (e.g. generated/bazos_report_dynamic_YYYYMMDD_pc_pamet_DDR4.md)
         if prompt_template:
             template_type = PromptType(prompt_template)
             if template_type is PromptType.CUSTOM:
