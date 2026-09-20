@@ -8,7 +8,13 @@ import json
 import re
 from datetime import datetime
 from pathlib import Path
-from .scraper import BazosScraper
+from .scraper import (
+    BazosScraper,
+    ReportSettings,
+    SearchMetadata,
+    load_results,
+    save_results_json,
+)
 from .reporter import HTMLReportGenerator
 from .prompts import PromptType, get_preset, render_prompt, render_prompt_block
 
@@ -498,9 +504,33 @@ def search(category, keyword, price_from, price_to, location, radius, sub_catego
                 if item.full_description and details_all and item.full_description != item.description:
                     click.echo(f"Full Description:\n{item.full_description}\n")
 
+        # Describe this search so it can be baked into the JSON dump. The
+        # data file then carries everything a later 'convert-format' needs --
+        # what was searched for and how the report was rendered -- instead of
+        # that context living only in the command line that produced it.
+        search_metadata = SearchMetadata(
+            category=category,
+            sub_category=sub_category,
+            keywords=list(keyword),
+            price_from=price_from,
+            price_to=price_to,
+            location=location or None,
+            radius=radius,
+            pages_get=pages_get,
+            details_all=details_all,
+            format=format,
+            scraped_at=datetime.now().isoformat(),
+            report=ReportSettings(
+                include_images=not no_images,
+                truncate_descriptions=truncate_descriptions,
+                download_images=download_images and not no_images,
+                images_dir=None,
+            ),
+        )
+
         # Save results
         if format == "json":
-            scraper.save_results(items, output)
+            scraper.save_results(items, output, search_metadata)
         elif format == "csv":
             _save_as_csv(items, output)
         elif format == "table":
@@ -519,20 +549,22 @@ def search(category, keyword, price_from, price_to, location, radius, sub_catego
                     downloader = ImageDownloader(output_dir=images_dir)
                     image_map = downloader.download_all_images(items)
                     click.echo(f"✅ Downloaded {len(image_map)} images\n")
+                    search_metadata.report.images_dir = images_dir
                 except Exception as e:
                     click.echo(f"⚠️  Could not download images: {e}")
                     click.echo("   Will use remote image URLs instead\n")
                     image_map = None
+                    search_metadata.report.download_images = False
 
             # Generate HTML report
-            keywords_display = ", ".join(keyword) if len(keyword) > 1 else keyword[0]
+            keywords_display = search_metadata.keyword_display
             if format == "html_dynamic":
                 click.echo(f"📄 Generating dynamic HTML report with filtering...")
                 generator = HTMLReportGenerator()
                 generator.generate_dynamic_report(
                     items=items,
                     output_file=html_output,
-                    topic=category,
+                    category=search_metadata.category_display,
                     keyword=keywords_display,
                     include_images=not no_images,
                     image_map=image_map,
@@ -544,7 +576,7 @@ def search(category, keyword, price_from, price_to, location, radius, sub_catego
                 generator.generate_report(
                     items=items,
                     output_file=html_output,
-                    topic=category,
+                    category=search_metadata.category_display,
                     keyword=keywords_display,
                     include_images=not no_images,
                     image_map=image_map,
@@ -555,7 +587,7 @@ def search(category, keyword, price_from, price_to, location, radius, sub_catego
             # the HTML report (html_output is already under generated/)
             json_output = Path(html_output).with_suffix(".json").as_posix()
             click.echo(f"💾 Also saving JSON file: {click.style(json_output, bold=True)}")
-            scraper.save_results(items, json_output)
+            scraper.save_results(items, json_output, search_metadata)
 
             output = html_output
             if download_images and not no_images:
@@ -777,8 +809,8 @@ def categories_search(show_subcategories, category, details_all):
                 raise SystemExit(1)
 
             click.echo("📂 Available Categories:\n")
-            for topic, description in sorted(categories_list.items()):
-                click.echo(f"  {click.style(topic.ljust(15), fg='cyan')} → {description}")
+            for category_code, description in sorted(categories_list.items()):
+                click.echo(f"  {click.style(category_code.ljust(15), fg='cyan')} → {description}")
             click.echo(f"\n✅ Found {len(categories_list)} categories")
             click.echo(f"💡 Tip: Use 'scrape-bazos categories-search -s' to see subcategories")
 
@@ -806,21 +838,10 @@ def categories_search(show_subcategories, category, details_all):
     help="Output filename. Format auto-detected from extension (.html, .csv, .json). Default: report_{input_name}.html. A bare filename is written under generated/.",
 )
 @click.option(
-    "--category",
-    default="Bazos",
-    type=str,
-    help="Category name to display in report (default: Bazos)",
-)
-@click.option(
-    "--keyword",
-    default="Items",
-    type=str,
-    help="Keyword to display in report (default: Items)",
-)
-@click.option(
     "--no-images",
     is_flag=True,
-    help="Don't show images in the HTML report (HTML format only)",
+    help="Don't show images in the HTML report, overriding the setting baked "
+         "into the input file (HTML format only)",
 )
 @click.option(
     "--download-images",
@@ -829,14 +850,10 @@ def categories_search(show_subcategories, category, details_all):
 )
 @click.option(
     "--images-dir",
-    default="images",
+    default=None,
     type=str,
-    help="Directory to save downloaded images (default: generated/images, HTML format only)",
-)
-@click.option(
-    "--truncate-descriptions",
-    is_flag=True,
-    help="Truncate descriptions to 2 lines in HTML report (HTML format only)",
+    help="Directory to save downloaded images (default: the directory recorded "
+         "in the input file, else generated/images; HTML format only)",
 )
 @click.option(
     "--static",
@@ -844,7 +861,7 @@ def categories_search(show_subcategories, category, details_all):
     help="Produce the plain static HTML list instead of the interactive report "
          "with filtering and sorting (HTML format only)",
 )
-def convert_format(input, output, category, keyword, no_images, download_images, images_dir, truncate_descriptions, static):
+def convert_format(input, output, no_images, download_images, images_dir, static):
     """
     Convert scraped data between formats
 
@@ -852,16 +869,27 @@ def convert_format(input, output, category, keyword, no_images, download_images,
     and converts it to various output formats (HTML, CSV, JSON).
     Format is automatically detected from the output file extension.
 
+    SELF-DESCRIBING INPUT:
+    The JSON dumped by 'search' carries a 'search' block with the category,
+    subcategory and keywords it was scraped with, plus the report settings
+    it was rendered with (images on/off, truncated descriptions). Those are
+    read straight from the file, so the report comes out labelled correctly
+    without repeating them here -- there are no --category, --keyword or
+    --truncate-descriptions options any more. A file dumped before that
+    block existed still converts; it just falls back to 'Bazos' / 'Items'
+    and prints a note.
+
     A '.html' output produces the interactive report with cascading
     keyword filters, price/location filters and sorting -- the same
     report 'search --format html_dynamic' generates. Pass --static for
     the plain, non-interactive list instead.
 
+    A '.json' output rewrites the same self-describing structure, carrying
+    the search block through unchanged.
+
     Examples:
 
         scrape-bazos convert-format --input bazos_results.json -o report.html
-
-        scrape-bazos convert-format -i results.json -o my_report.html --category pc --keyword "nas"
 
         scrape-bazos convert-format -i results.json -o plain.html --static
 
@@ -872,52 +900,45 @@ def convert_format(input, output, category, keyword, no_images, download_images,
         scrape-bazos convert-format -i results.json -o formatted_results.json
     """
     try:
-        # Load JSON file
+        # Load JSON file. load_results() rebuilds nested item_details as
+        # BazosItemDetails objects (the dump is written with asdict()) and
+        # hands back the baked-in search metadata alongside the items.
         click.echo(f"📂 Loading items from: {click.style(input, bold=True)}...\n")
 
-        with open(input, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-
-        # Handle both direct array and object with 'items' key
-        if isinstance(data, list):
-            items_data = data
-        elif isinstance(data, dict) and 'items' in data:
-            items_data = data['items']
-        else:
-            click.echo("❌ JSON file format not recognized. Expected array of items or object with 'items' key.", err=True)
+        try:
+            items, metadata, has_metadata = load_results(input)
+        except ValueError as e:
+            click.echo(f"❌ {e}", err=True)
             raise SystemExit(1)
 
-        # Convert dictionaries to BazosItem objects.
-        # 'search' writes items with asdict(), so nested item_details comes
-        # back as a plain dict -- rebuild it as BazosItemDetails, otherwise
-        # every later item.item_details.<attr> access blows up.
-        from .scraper import BazosItem, BazosItemDetails
+        click.echo(f"✅ Loaded {len(items)} items")
 
-        def _to_item(raw):
-            if not isinstance(raw, dict):
-                return raw
-            fields = dict(raw)
-            details = fields.pop("item_details", None)
-            if isinstance(details, dict):
-                details = BazosItemDetails(
-                    image_urls=details.get("image_urls") or [],
-                    full_description=details.get("full_description"),
-                )
-            # Tolerate flat JSON that carries the detail fields at top level
-            flat_images = fields.pop("image_urls", None)
-            flat_desc = fields.pop("full_description", None)
-            if details is None and (flat_images or flat_desc):
-                details = BazosItemDetails(
-                    image_urls=flat_images or [],
-                    full_description=flat_desc,
-                )
-            if details is not None:
-                fields["item_details"] = details
-            return BazosItem(**fields)
+        # Everything that used to be passed on the command line now comes
+        # from the file itself.
+        if has_metadata:
+            click.echo(
+                f"🏷️  Search metadata: category "
+                f"{click.style(metadata.category_display, bold=True)}, keyword(s) "
+                f"{click.style(metadata.keyword_display, bold=True)}"
+                + (f", scraped {metadata.scraped_at}" if metadata.scraped_at else "")
+                + "\n"
+            )
+        else:
+            click.echo(
+                "⚠️  No search metadata in this file (it predates the baked-in "
+                "'search' block). Falling back to "
+                f"'{metadata.category_display}' / '{metadata.keyword_display}' for "
+                "the report heading -- re-run 'search' to get a self-describing "
+                "dump.\n"
+            )
 
-        items = [_to_item(item) for item in items_data]
-
-        click.echo(f"✅ Loaded {len(items)} items\n")
+        # Report settings come from the file too; --no-images still wins as
+        # an explicit override, and --images-dir defaults to the directory
+        # the original run used.
+        include_images = metadata.report.include_images and not no_images
+        truncate_descriptions = metadata.report.truncate_descriptions
+        if images_dir is None:
+            images_dir = metadata.report.images_dir or "images"
 
         # Determine the output format from the output file extension, as the
         # help text promises. Previously this function compared an undefined
@@ -954,7 +975,7 @@ def convert_format(input, output, category, keyword, no_images, download_images,
 
             # Handle image downloading if requested
             image_map = None
-            if download_images and not no_images:
+            if download_images and include_images:
                 images_dir = _generated_dir(images_dir)
                 click.echo(f"🖼️  Downloading images to '{images_dir}' directory...\n")
                 try:
@@ -969,14 +990,16 @@ def convert_format(input, output, category, keyword, no_images, download_images,
 
             # Generate HTML report. The interactive report is the default,
             # matching 'search --format html_dynamic'; --static opts out.
+            # Heading and display settings come from the input file's
+            # baked-in search metadata.
             if static:
                 click.echo(f"📄 Converting to static HTML format...")
                 generator.generate_report(
                     items=items,
                     output_file=output,
-                    topic=category,
-                    keyword=keyword,
-                    include_images=not no_images,
+                    category=metadata.category_display,
+                    keyword=metadata.keyword_display,
+                    include_images=include_images,
                     image_map=image_map,
                     truncate_descriptions=truncate_descriptions,
                 )
@@ -985,14 +1008,14 @@ def convert_format(input, output, category, keyword, no_images, download_images,
                 generator.generate_dynamic_report(
                     items=items,
                     output_file=output,
-                    topic=category,
-                    keyword=keyword,
-                    include_images=not no_images,
+                    category=metadata.category_display,
+                    keyword=metadata.keyword_display,
+                    include_images=include_images,
                     image_map=image_map,
                     truncate_descriptions=truncate_descriptions,
                 )
 
-            if download_images and not no_images:
+            if download_images and include_images:
                 click.echo(f"🖼️  Images saved to: {click.style(images_dir, bold=True)}")
 
         elif output_format == "csv":
@@ -1001,7 +1024,9 @@ def convert_format(input, output, category, keyword, no_images, download_images,
 
         elif output_format == "json":
             click.echo(f"📄 Converting to JSON format...")
-            _save_as_json(items, output)
+            # Round-trip the search metadata so a converted JSON stays just
+            # as self-describing as the file it came from.
+            _save_as_json(items, output, metadata)
 
         click.echo(f"✅ Conversion successfully completed!")
         click.echo(f"📊 Contains: {click.style(str(len(items)), bold=True)} items")
@@ -1332,25 +1357,14 @@ def _save_as_table(items, output_file: str) -> None:
         f.write(f"Total items: {len(items)}\n")
 
 
-def _save_as_json(items, output_file: str) -> None:
-    """Save items as JSON"""
-    data = [
-        {
-            "title": item.title,
-            "price": item.price,
-            "location": item.location,
-            "description": item.description,
-            "image_url": item.image_url,
-            "image_urls": item.image_urls,
-            "full_description": item.full_description,
-            "item_url": item.item_url,
-            "date_posted": item.date_posted,
-        }
-        for item in items
-    ]
+def _save_as_json(items, output_file: str, metadata=None) -> None:
+    """Save items as JSON in the canonical, self-describing structure.
 
-    with open(output_file, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+    Same shape 'search' writes -- schema_version / timestamp / total_items /
+    search / items -- so a converted file can be fed straight back into
+    'convert-format' and still carry the search that produced it.
+    """
+    save_results_json(items, output_file, metadata)
 
 
 if __name__ == "__main__":

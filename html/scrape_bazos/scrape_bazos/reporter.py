@@ -415,7 +415,7 @@ class HTMLReportGenerator:
         self,
         items: List[BazosItem],
         output_file: str = "bazos_report.html",
-        topic: str = "N/A",
+        category: str = "N/A",
         keyword: str = "N/A",
         include_images: bool = True,
         image_map: Optional[dict] = None,
@@ -433,7 +433,7 @@ class HTMLReportGenerator:
         <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Bazos.sk - {keyword}</title>
+            <title>Bazos.sk - {category} - {keyword}</title>
             {self.css_template}
         </head>
         <body>
@@ -442,6 +442,7 @@ class HTMLReportGenerator:
                     <div class="header-top">
                         <div>
                             <h1>🛒 Bazos.sk Items</h1>
+                            <p class="report-subtitle" style="opacity:.85;margin:2px 0 0">📂 {category} &nbsp;·&nbsp; 🔎 {keyword}</p>
                             <p id="summary"></p>
                         </div>
                         <div class="item-counter">
@@ -787,7 +788,7 @@ class HTMLReportGenerator:
         self,
         items: List[BazosItem],
         output_file: str = "bazos_report_dynamic.html",
-        topic: str = "N/A",
+        category: str = "N/A",
         keyword: str = "N/A",
         include_images: bool = True,
         image_map: Optional[dict] = None,
@@ -1684,7 +1685,7 @@ class HTMLReportGenerator:
         <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Bazos.sk - {keyword} (Dynamic)</title>
+            <title>Bazos.sk - {category} - {keyword} (Dynamic)</title>
             {css_template}
         </head>
         <body>
@@ -1693,6 +1694,7 @@ class HTMLReportGenerator:
                     <div class="header-top">
                         <div>
                             <h1>🛒 Bazos.sk Items - Dynamic</h1>
+                            <p class="report-subtitle" style="opacity:.85;margin:2px 0 0">📂 {category} &nbsp;·&nbsp; 🔎 {keyword}</p>
                             <p id="summary"></p>
                         </div>
 

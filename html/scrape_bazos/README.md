@@ -66,20 +66,20 @@ pip install requests beautifulsoup4 lxml pillow
 uv sync
 
 # Start scraping!
-scrape-bazos search --topic pc --keyword "nas"
+scrape-bazos search --category pc --keyword "nas"
 ```
 
 ### Basic Search
 
 ```bash
 # Search for NAS in PC category
-scrape-bazos search --topic pc --keyword "nas"
+scrape-bazos search --category pc --keyword "nas"
 
 # With price range
-scrape-bazos search --topic pc --keyword "notebook" --price-from 500 --price-to 1000
+scrape-bazos search --category pc --keyword "notebook" --price-from 500 --price-to 1000
 
 # Real estate search
-scrape-bazos search --topic reality --keyword "byt" --location "Bratislava" --radius 10
+scrape-bazos search --category reality --keyword "byt" --location "Bratislava" --radius 10
 ```
 
 ### Python API
@@ -89,7 +89,7 @@ from scrape_bazos import BazosScraper
 
 scraper = BazosScraper()
 items = scraper.scrape_listings(
-    topic="pc",
+    category="pc",
     keyword="nas",
     max_pages=1
 )
@@ -127,7 +127,7 @@ scrape-bazos search --help
 scrape-bazos search [OPTIONS]
 
 Options:
-  --topic TEXT            Category (required, e.g., pc, auto, reality)
+  --category TEXT         Category (required, e.g., pc, auto, reality)
   --keyword TEXT          Search keyword (required)
   --price-from TEXT       Minimum price (optional)
   --price-to TEXT         Maximum price (optional)
@@ -145,19 +145,19 @@ Options:
 
 ```bash
 # PC Components
-scrape-bazos search --topic pc --keyword "ssd" --price-from 50 --price-to 200
+scrape-bazos search --category pc --keyword "ssd" --price-from 50 --price-to 200
 
 # Used Cars
-scrape-bazos search --topic auto --keyword "skoda" --price-to 15000 --pages 3
+scrape-bazos search --category auto --keyword "skoda" --price-to 15000 --pages 3
 
 # Real Estate
-scrape-bazos search --topic reality --keyword "byt" --location "Bratislava" --radius 10
+scrape-bazos search --category reality --keyword "byt" --location "Bratislava" --radius 10
 
 # Electronics with console display
-scrape-bazos search --topic elektronika --keyword "iphone" --pages 2 --display
+scrape-bazos search --category elektronika --keyword "iphone" --pages 2 --display
 
 # Save as CSV
-scrape-bazos search --topic pc --keyword "monitor" --format csv --output monitors.csv
+scrape-bazos search --category pc --keyword "monitor" --format csv --output monitors.csv
 
 # View all available categories
 scrape-bazos categories-search
@@ -169,7 +169,7 @@ scrape-bazos categories-search
 The scraper constructs URLs in the following format:
 
 ```
-https://{topic}.bazos.sk/?hledat={keyword}&rubriky={topic}&humkreis={radius}&cenaod={price_from}&cenado={price_to}&kitx=ano
+https://{category}.bazos.sk/?hledat={keyword}&rubriky={category}&humkreis={radius}&cenaod={price_from}&cenado={price_to}&kitx=ano
 ```
 
 **Example:**
@@ -179,7 +179,7 @@ https://pc.bazos.sk/?hledat=nas&rubriky=pc&humkreis=25&cenaod=&cenado=&kitx=ano
 
 **URL Parameters:**
 - `hledat` - Search keyword
-- `rubriky` - Category/topic
+- `rubriky` - Category
 - `hlokalita` - Location (optional)
 - `humkreis` - Search radius in km (default: 25)
 - `cenaod` - Price from (optional)
@@ -191,12 +191,36 @@ https://pc.bazos.sk/?hledat=nas&rubriky=pc&humkreis=25&cenaod=&cenado=&kitx=ano
 
 ### JSON (Default)
 
-Structured data format, best for programmatic use:
+Structured data format, best for programmatic use. The dump is
+**self-describing**: alongside the items it carries a `search` block with the
+search that produced them and the report settings they were rendered with, so
+any later consumer (`convert-format`, an LLM prompt, an external tool) knows
+what it is looking at without being handed the original command line.
 
 ```json
 {
-  "timestamp": "2026-09-03T12:00:00",
+  "schema_version": 2,
+  "timestamp": "2026-09-20T12:00:00",
   "total_items": 42,
+  "search": {
+    "category": "pc",
+    "sub_category": "pamet",
+    "keywords": ["DDR4", "kingston"],
+    "price_from": "10",
+    "price_to": "500",
+    "location": "Bratislava",
+    "radius": 50,
+    "pages_get": "all",
+    "details_all": true,
+    "format": "html_dynamic",
+    "scraped_at": "2026-09-20T12:00:00",
+    "report": {
+      "include_images": true,
+      "truncate_descriptions": false,
+      "download_images": false,
+      "images_dir": null
+    }
+  },
   "items": [
     {
       "title": "QNAP NAS 4 Bay",
@@ -205,10 +229,58 @@ Structured data format, best for programmatic use:
       "description": "Used QNAP TS-451 NAS server...",
       "image_url": "https://...",
       "item_url": "https://pc.bazos.sk/...",
-      "date_posted": "2 days ago"
+      "date_posted": "2 days ago",
+      "item_details": {
+        "image_urls": ["https://...", "https://..."],
+        "full_description": "..."
+      },
+      "category": null
     }
   ]
 }
+```
+
+Fields in the `search` block:
+
+| Field | Meaning |
+|---|---|
+| `category`, `sub_category` | What was searched; rendered as `pc / pamet` in report headings |
+| `keywords` | Every `--keyword` given, in order; rendered as `DDR4, kingston` |
+| `price_from`, `price_to`, `location`, `radius` | The search filters |
+| `pages_get`, `details_all`, `format` | How the scrape was run |
+| `scraped_at` | When the scrape happened (the top-level `timestamp` is when the file was written) |
+| `report.*` | Display settings: images on/off, truncated descriptions, whether images were downloaded and where |
+
+A file written before this block existed (no `schema_version`, or a bare array
+of items) still loads; `convert-format` falls back to `Bazos` / `Items` for the
+report heading and prints a note.
+
+### Converting an existing dump
+
+```bash
+# Interactive report, labelled from the file's own search metadata
+scrape-bazos convert-format -i generated/bazos_results_20260920_pc_pamet_DDR4.json -o report.html
+
+# Plain static list
+scrape-bazos convert-format -i results.json -o plain.html --static
+
+# Other formats -- detected from the output extension
+scrape-bazos convert-format -i results.json -o data.csv
+scrape-bazos convert-format -i results.json -o normalised.json
+```
+
+Because the category, keywords and display settings come from the file,
+`convert-format` no longer takes `--category`, `--keyword` or
+`--truncate-descriptions`. `--no-images` remains as an explicit override, and
+`--images-dir` defaults to the directory the original run used.
+
+Reading a dump from Python:
+
+```python
+from scrape_bazos import load_results
+
+items, metadata, has_metadata = load_results("generated/results.json")
+print(metadata.category_display, "|", metadata.keyword_display)
 ```
 
 ### CSV
@@ -294,7 +366,7 @@ BazosItem(
 from scrape_bazos import BazosScraper
 
 scraper = BazosScraper()
-items = scraper.scrape_listings(topic="pc", keyword="nas")
+items = scraper.scrape_listings(category="pc", keyword="nas")
 
 for item in items[:3]:
     print(f"{item.title}: {item.price}")
@@ -304,7 +376,7 @@ for item in items[:3]:
 
 ```python
 items = scraper.scrape_listings(
-    topic="pc",
+    category="pc",
     keyword="notebook",
     price_from="500",
     price_to="1000",
@@ -316,7 +388,7 @@ items = scraper.scrape_listings(
 
 ```python
 items = scraper.scrape_listings(
-    topic="reality",
+    category="reality",
     keyword="byt",
     location="Bratislava",
     radius=10
@@ -329,13 +401,13 @@ items = scraper.scrape_listings(
 from scrape_bazos import HTMLReportGenerator
 
 scraper = BazosScraper()
-items = scraper.scrape_listings(topic="pc", keyword="gpu", max_pages=1)
+items = scraper.scrape_listings(category="pc", keyword="gpu", max_pages=1)
 
 generator = HTMLReportGenerator()
 generator.generate_report(
     items=items,
     output_file="gpu_report.html",
-    topic="pc",
+    category="pc",
     keyword="gpu"
 )
 ```
@@ -346,7 +418,7 @@ generator.generate_report(
 from scrape_bazos import ImageDownloader, HTMLReportGenerator
 
 scraper = BazosScraper()
-items = scraper.scrape_listings(topic="pc", keyword="monitor")
+items = scraper.scrape_listings(category="pc", keyword="monitor")
 
 # Download images
 downloader = ImageDownloader("images")
@@ -357,7 +429,7 @@ generator = HTMLReportGenerator()
 generator.generate_report(
     items=items,
     output_file="monitors.html",
-    topic="pc",
+    category="pc",
     keyword="monitor",
     image_map=image_map
 )
@@ -382,7 +454,7 @@ scraper = BazosScraper(timeout=10)  # timeout in seconds
 
 # Build URL
 url = scraper.build_url(
-    topic="pc",
+    category="pc",
     keyword="ssd",
     price_from="50",
     price_to="200",
@@ -392,7 +464,7 @@ url = scraper.build_url(
 
 # Scrape listings
 items = scraper.scrape_listings(
-    topic="pc",
+    category="pc",
     keyword="ssd",
     price_from="50",
     price_to="200",
@@ -432,7 +504,7 @@ generator = HTMLReportGenerator()
 generator.generate_report(
     items=items,
     output_file="report.html",
-    topic="pc",
+    category="pc",
     keyword="ssd",
     include_images=True,
     image_map=image_map
@@ -472,7 +544,7 @@ scraper.session.headers.update({
 ### Filter Results Programmatically
 
 ```python
-items = scraper.scrape_listings(topic="pc", keyword="ssd")
+items = scraper.scrape_listings(category="pc", keyword="ssd")
 
 # Filter items with price
 priced_items = [item for item in items if item.price]
@@ -489,7 +561,7 @@ detailed_items = [item for item in items if len(item.description) > 100]
 ```python
 all_items = []
 for keyword in ["ssd", "hdd", "nvme"]:
-    items = scraper.scrape_listings(topic="pc", keyword=keyword, max_pages=1)
+    items = scraper.scrape_listings(category="pc", keyword=keyword, max_pages=1)
     all_items.extend(items)
 
 scraper.save_results(all_items, "storage_devices.json")
@@ -497,10 +569,10 @@ scraper.save_results(all_items, "storage_devices.json")
 
 ## Categories
 
-Popular topics you can search:
+Popular categories you can search:
 
-| Topic | Description |
-|-------|-------------|
+| Category | Description |
+|----------|-------------|
 | pc | Computers & IT |
 | auto | Automobiles |
 | reality | Real Estate |
@@ -552,7 +624,7 @@ uv sync
 ### "No items found"
 
 **Possible causes:**
-- Misspelled topic or keyword
+- Misspelled category or keyword
 - Category doesn't exist on bazos.sk
 - Price filters too restrictive
 - No listings match your criteria
@@ -568,7 +640,7 @@ uv sync
 **Solution:** Increase the timeout:
 
 ```bash
-python -m scrape_bazos.cli --topic pc --keyword "ssd" --timeout 20
+python -m scrape_bazos.cli --category pc --keyword "ssd" --timeout 20
 ```
 
 Or in Python:
@@ -596,7 +668,7 @@ generator.generate_report(items, "report.html", image_map=image_map)
 **Solution:** Add delays between requests or reduce page count:
 
 ```bash
-python -m scrape_bazos.cli --topic pc --keyword "ssd" --pages 1
+python -m scrape_bazos.cli --category pc --keyword "ssd" --pages 1
 ```
 
 ### Import errors after migration

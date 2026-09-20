@@ -67,7 +67,7 @@ class TestBazosScraper:
     def test_build_url_basic(self):
         """Test URL building with basic parameters"""
         scraper = BazosScraper()
-        url = scraper.build_url(topic="pc", keyword="nas")
+        url = scraper.build_url(category="pc", keyword="nas")
 
         assert "https://pc.bazos.sk/" in url
         assert "hledat=nas" in url
@@ -78,7 +78,7 @@ class TestBazosScraper:
         """Test URL building with price parameters"""
         scraper = BazosScraper()
         url = scraper.build_url(
-            topic="pc",
+            category="pc",
             keyword="notebook",
             price_from="500",
             price_to="1000",
@@ -91,7 +91,7 @@ class TestBazosScraper:
         """Test URL building with location"""
         scraper = BazosScraper()
         url = scraper.build_url(
-            topic="reality",
+            category="reality",
             keyword="byt",
             location="Bratislava",
             radius=20,
@@ -103,7 +103,7 @@ class TestBazosScraper:
     def test_build_url_default_radius(self):
         """Test URL building uses default radius"""
         scraper = BazosScraper()
-        url = scraper.build_url(topic="pc", keyword="ssd")
+        url = scraper.build_url(category="pc", keyword="ssd")
 
         assert "humkreis=25" in url
 
@@ -121,7 +121,7 @@ class TestURLStructure:
         """Test that generated URL matches bazos.sk format"""
         scraper = BazosScraper()
         url = scraper.build_url(
-            topic="pc",
+            category="pc",
             keyword="nas",
             price_from="100",
             price_to="500",
@@ -135,11 +135,11 @@ class TestURLStructure:
         for param in params:
             assert param in url
 
-    def test_different_topics(self):
-        """Test URL building for different topics"""
+    def test_different_categories(self):
+        """Test URL building for different categories"""
         scraper = BazosScraper()
 
-        topics = ["pc", "auto", "reality", "elektronika"]
-        for topic in topics:
-            url = scraper.build_url(topic=topic, keyword="test")
-            assert f"https://{topic}.bazos.sk/" in url
+        categories = ["pc", "auto", "reality", "elektronika"]
+        for category in categories:
+            url = scraper.build_url(category=category, keyword="test")
+            assert f"https://{category}.bazos.sk/" in url

@@ -6,11 +6,233 @@ Scrapes classifieds listings from bazos.sk with descriptions and images
 import requests
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
-from typing import List, Dict, Optional
+from typing import Any, List, Dict, Optional, Tuple
 from dataclasses import dataclass, field, asdict
 import json
 from datetime import datetime
 import re
+
+# Version of the dumped JSON envelope written by `save_results`.
+#
+#   1 -- {"timestamp", "total_items", "items": [...]}
+#   2 -- adds "schema_version" and the "search" block (SearchMetadata), so a
+#        dump carries the search that produced it and the report settings it
+#        was rendered with. This is what lets `convert-format` rebuild a
+#        report without being told --category / --keyword / display flags
+#        again: the data file is self-describing.
+#
+# A file without "schema_version" is treated as version 1 and still loads.
+SCHEMA_VERSION = 2
+
+
+@dataclass
+class ReportSettings:
+    """How a report rendered from these items should look.
+
+    Captured at scrape time from the `search` command's presentation flags so
+    a later `convert-format` reproduces the same report by default.
+    """
+
+    include_images: bool = True
+    truncate_descriptions: bool = False
+    download_images: bool = False
+    images_dir: Optional[str] = None
+
+    @classmethod
+    def from_dict(cls, raw: Optional[dict]) -> "ReportSettings":
+        if not isinstance(raw, dict):
+            return cls()
+        return cls(
+            include_images=bool(raw.get("include_images", True)),
+            truncate_descriptions=bool(raw.get("truncate_descriptions", False)),
+            download_images=bool(raw.get("download_images", False)),
+            images_dir=raw.get("images_dir"),
+        )
+
+
+@dataclass
+class SearchMetadata:
+    """The search that produced a set of items, baked into the JSON dump.
+
+    Everything the `search` command was asked for -- the criteria as well as
+    the report settings -- so that any consumer of the JSON (convert-format,
+    an LLM prompt, an external tool) knows what it is looking at without
+    being handed the original command line again.
+    """
+
+    category: Optional[str] = None
+    sub_category: Optional[str] = None
+    keywords: List[str] = field(default_factory=list)
+    price_from: Optional[str] = None
+    price_to: Optional[str] = None
+    location: Optional[str] = None
+    radius: Optional[int] = None
+    pages_get: Optional[str] = None
+    details_all: bool = False
+    format: Optional[str] = None
+    scraped_at: Optional[str] = None
+    report: ReportSettings = field(default_factory=ReportSettings)
+
+    # Fallbacks used when a dump predates this block (schema version 1), so
+    # reports built from a legacy file still get a sensible heading.
+    DEFAULT_CATEGORY = "Bazos"
+    DEFAULT_KEYWORD = "Items"
+
+    @property
+    def category_display(self) -> str:
+        """Category label for a report heading, e.g. 'pc' or 'pc / pamet'."""
+        if not self.category:
+            return self.DEFAULT_CATEGORY
+        if self.sub_category:
+            return f"{self.category} / {self.sub_category}"
+        return self.category
+
+    @property
+    def keyword_display(self) -> str:
+        """Keywords as one label, e.g. 'nas, backup'."""
+        kws = [k for k in self.keywords if k]
+        return ", ".join(kws) if kws else self.DEFAULT_KEYWORD
+
+    @classmethod
+    def from_dict(cls, raw: Optional[dict]) -> "SearchMetadata":
+        """Rebuild from a dumped dict, tolerating missing/extra keys."""
+        if not isinstance(raw, dict):
+            return cls()
+
+        keywords = raw.get("keywords")
+        if isinstance(keywords, str):
+            keywords = [keywords]
+        elif not isinstance(keywords, list):
+            # Tolerate the singular key a hand-written file might use
+            single = raw.get("keyword")
+            keywords = [single] if isinstance(single, str) and single else []
+
+        radius = raw.get("radius")
+        try:
+            radius = int(radius) if radius is not None else None
+        except (TypeError, ValueError):
+            radius = None
+
+        return cls(
+            category=raw.get("category"),
+            sub_category=raw.get("sub_category"),
+            keywords=[str(k) for k in keywords if k],
+            price_from=raw.get("price_from"),
+            price_to=raw.get("price_to"),
+            location=raw.get("location"),
+            radius=radius,
+            pages_get=raw.get("pages_get"),
+            details_all=bool(raw.get("details_all", False)),
+            format=raw.get("format"),
+            scraped_at=raw.get("scraped_at") or raw.get("timestamp"),
+            report=ReportSettings.from_dict(raw.get("report")),
+        )
+
+
+def item_from_dict(raw: Any) -> "BazosItem":
+    """Rebuild a BazosItem from a dumped dict.
+
+    `save_results` serialises with `asdict()`, so the nested `item_details`
+    comes back as a plain dict -- it has to be rebuilt as BazosItemDetails or
+    every later `item.item_details.<attr>` access blows up. Flat JSON that
+    carries `image_urls` / `full_description` at the top level is tolerated
+    too, as are unknown keys from a newer dump.
+    """
+    if not isinstance(raw, dict):
+        return raw
+
+    fields = dict(raw)
+    details = fields.pop("item_details", None)
+    if isinstance(details, dict):
+        details = BazosItemDetails(
+            image_urls=details.get("image_urls") or [],
+            full_description=details.get("full_description"),
+        )
+
+    flat_images = fields.pop("image_urls", None)
+    flat_desc = fields.pop("full_description", None)
+    if details is None and (flat_images or flat_desc):
+        details = BazosItemDetails(
+            image_urls=flat_images or [],
+            full_description=flat_desc,
+        )
+    if details is not None:
+        fields["item_details"] = details
+
+    known = {f for f in BazosItem.__dataclass_fields__}
+    fields = {k: v for k, v in fields.items() if k in known}
+    return BazosItem(**fields)
+
+
+def load_results(input_file: str) -> Tuple[List["BazosItem"], SearchMetadata, bool]:
+    """Load a dumped JSON file.
+
+    Returns `(items, metadata, has_metadata)`. `has_metadata` is False for a
+    legacy dump (schema version 1, or a bare array of items) that carries no
+    baked-in search block -- the caller decides whether to warn. In that case
+    `metadata` is an empty SearchMetadata whose display properties fall back
+    to 'Bazos' / 'Items'.
+
+    Raises ValueError if the file is not a shape we recognise.
+    """
+    with open(input_file, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    if isinstance(data, list):
+        items_data, raw_meta = data, None
+    elif isinstance(data, dict) and "items" in data:
+        items_data = data["items"]
+        raw_meta = data.get("search")
+    else:
+        raise ValueError(
+            "JSON file format not recognized. Expected an array of items or "
+            "an object with an 'items' key."
+        )
+
+    has_metadata = isinstance(raw_meta, dict)
+    metadata = SearchMetadata.from_dict(raw_meta) if has_metadata else SearchMetadata()
+
+    # A legacy dump still has a top-level timestamp worth keeping
+    if not metadata.scraped_at and isinstance(data, dict):
+        metadata.scraped_at = data.get("timestamp")
+
+    return [item_from_dict(item) for item in items_data], metadata, has_metadata
+
+
+def save_results_json(
+    items: List["BazosItem"],
+    output_file: str,
+    metadata: Optional[SearchMetadata] = None,
+) -> dict:
+    """Write the canonical, self-describing JSON dump and return what it wrote.
+
+    Shape:
+
+        {
+          "schema_version": 2,
+          "timestamp": "<when this file was written>",
+          "total_items": N,
+          "search": { ...SearchMetadata... },
+          "items": [ ...BazosItem... ]
+        }
+    """
+    metadata = metadata or SearchMetadata()
+    now = datetime.now().isoformat()
+    if not metadata.scraped_at:
+        metadata.scraped_at = now
+
+    data = {
+        "schema_version": SCHEMA_VERSION,
+        "timestamp": now,
+        "total_items": len(items),
+        "search": asdict(metadata),
+        "items": [asdict(item) for item in items],
+    }
+
+    with open(output_file, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+
+    return data
 
 
 @dataclass
@@ -58,7 +280,7 @@ class BazosItem:
 class BazosScraper:
     """Main scraper class for bazos.sk"""
 
-    BASE_URL = "https://{topic}.bazos.sk/"
+    BASE_URL = "https://{category}.bazos.sk/"
 
     def __init__(self, timeout: int = 10, max_retries: int = 3, retry_delay: float = 1.0):
         self.timeout = timeout
@@ -96,7 +318,7 @@ class BazosScraper:
         """
         # Normalize category to lowercase (website URLs use lowercase)
         category = category.lower()
-        base = self.BASE_URL.format(topic=category)
+        base = self.BASE_URL.format(category=category)
 
         # If sub_category is provided, include it in the base path
         # e.g., "https://reality.bazos.sk/" becomes "https://reality.bazos.sk/predam/"
@@ -209,8 +431,8 @@ class BazosScraper:
                 # Build URL for next page
                 if next_page_url.startswith("/"):
                     # Page 2+ style: relative URL with path prefix
-                    topic = category.lower()
-                    url = f"https://{topic}.bazos.sk{next_page_url}"
+                    category_host = category.lower()
+                    url = f"https://{category_host}.bazos.sk{next_page_url}"
                 else:
                     # Page 1 style: query parameters only
                     base_url = url.split("&kitx=")[0] if "&kitx=" in url else url
@@ -454,8 +676,8 @@ class BazosScraper:
                     # Prepare URL for next page
                     if next_page_url.startswith("/"):
                         # Page 2+ style: relative URL with path prefix
-                        topic = category.lower()
-                        current_url = f"https://{topic}.bazos.sk{next_page_url}"
+                        category_host = category.lower()
+                        current_url = f"https://{category_host}.bazos.sk{next_page_url}"
                     else:
                         # Page 1 style: query parameters only
                         base_url = current_url.split("&kitx=")[0] if "&kitx=" in current_url else current_url
@@ -1107,17 +1329,20 @@ class BazosScraper:
             print(f"Error fetching all categories with subcategories: {e}")
             return {}
 
-    def save_results(self, items: List[BazosItem], output_file: str) -> None:
-        """Save results to JSON file"""
-        data = {
-            "timestamp": datetime.now().isoformat(),
-            "total_items": len(items),
-            "items": [asdict(item) for item in items],
-        }
+    def save_results(
+        self,
+        items: List[BazosItem],
+        output_file: str,
+        metadata: Optional[SearchMetadata] = None,
+    ) -> None:
+        """Save results to JSON file.
 
-        with open(output_file, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
-
+        The dump is self-describing: alongside the items it carries the
+        `search` block (the criteria that produced them and the report
+        settings they were rendered with), so `convert-format` and any other
+        consumer can rebuild a report from the file alone.
+        """
+        save_results_json(items, output_file, metadata)
         print(f"Results saved to {output_file}")
 
 
