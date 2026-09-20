@@ -321,6 +321,55 @@ class HTMLReportGenerator:
                 color: #ccc;
             }
 
+            .modal-nav {
+                position: absolute;
+                top: 50%;
+                transform: translateY(-50%);
+                background: rgba(0, 0, 0, 0.5);
+                color: white;
+                border: none;
+                font-size: 30px;
+                padding: 10px 15px;
+                cursor: pointer;
+                border-radius: 3px;
+                transition: all 0.2s;
+                z-index: 1001;
+            }
+
+            .modal-nav:hover {
+                background: rgba(0, 0, 0, 0.8);
+                transform: translateY(-50%) scale(1.1);
+            }
+
+            .modal-nav.prev {
+                left: 20px;
+            }
+
+            .modal-nav.next {
+                right: 20px;
+            }
+
+            .modal-nav:disabled {
+                opacity: 0.3;
+                cursor: not-allowed;
+            }
+
+            .modal-nav:disabled:hover {
+                transform: translateY(-50%);
+                background: rgba(0, 0, 0, 0.5);
+            }
+
+            .modal-counter {
+                position: absolute;
+                bottom: -30px;
+                left: 50%;
+                transform: translateX(-50%);
+                color: white;
+                font-size: 0.9em;
+                font-weight: 600;
+                white-space: nowrap;
+            }
+
             @media (max-width: 768px) {
                 .header-top {
                     flex-direction: column;
@@ -394,23 +443,81 @@ class HTMLReportGenerator:
             <div id="imageModal" class="modal">
                 <div class="modal-content">
                     <button class="modal-close" onclick="closeModal()">&times;</button>
+                    <button class="modal-nav prev" id="prevImageBtn" onclick="previousImage()" title="Previous image (←)">&lsaquo;</button>
                     <img id="modalImg" class="modal-img" src="" alt="">
+                    <button class="modal-nav next" id="nextImageBtn" onclick="nextImage()" title="Next image (→)">&rsaquo;</button>
+                    <div class="modal-counter"><span id="imageCounter">1 / 1</span></div>
                 </div>
             </div>
 
             <script>
                 const data = {items_json};
                 let isDescriptionTruncated = {str(truncate_descriptions).lower()};
+                let currentImages = [];
+                let currentImageIndex = 0;
 
                 function openImage(src) {{
                     const modal = document.getElementById('imageModal');
                     const img = document.getElementById('modalImg');
+
+                    // Find all images in current item
+                    const clicked = event.target;
+                    const itemDiv = clicked.closest('.item');
+                    const thumbnails = itemDiv.querySelectorAll('.item-thumbnail');
+                    currentImages = Array.from(thumbnails).map(t => t.src);
+                    currentImageIndex = Array.from(thumbnails).indexOf(clicked);
+
                     img.src = src;
                     modal.classList.add('show');
+                    updateImageNavigation();
+
+                    // Add keyboard navigation
+                    document.addEventListener('keydown', handleImageKeyboard);
                 }}
 
                 function closeModal() {{
                     document.getElementById('imageModal').classList.remove('show');
+                    document.removeEventListener('keydown', handleImageKeyboard);
+                }}
+
+                function previousImage() {{
+                    if (currentImageIndex > 0) {{
+                        currentImageIndex--;
+                        updateImage();
+                    }}
+                }}
+
+                function nextImage() {{
+                    if (currentImageIndex < currentImages.length - 1) {{
+                        currentImageIndex++;
+                        updateImage();
+                    }}
+                }}
+
+                function updateImage() {{
+                    const img = document.getElementById('modalImg');
+                    img.src = currentImages[currentImageIndex];
+                    updateImageNavigation();
+                }}
+
+                function updateImageNavigation() {{
+                    const prevBtn = document.getElementById('prevImageBtn');
+                    const nextBtn = document.getElementById('nextImageBtn');
+                    const counter = document.getElementById('imageCounter');
+
+                    prevBtn.disabled = currentImageIndex === 0;
+                    nextBtn.disabled = currentImageIndex === currentImages.length - 1;
+                    counter.textContent = (currentImageIndex + 1) + ' / ' + currentImages.length;
+                }}
+
+                function handleImageKeyboard(e) {{
+                    if (!document.getElementById('imageModal').classList.contains('show')) return;
+
+                    if (e.key === 'ArrowLeft') {{
+                        previousImage();
+                    }} else if (e.key === 'ArrowRight') {{
+                        nextImage();
+                    }}
                 }}
 
                 function getImages(item) {{
@@ -476,7 +583,7 @@ class HTMLReportGenerator:
                         let thumbnailsHTML = '';
                         images.forEach(imgSrc => {{
                             if (imgSrc) {{
-                                thumbnailsHTML += `<img src="${{imgSrc}}" class="item-thumbnail" onclick="openImage('${{imgSrc}}')" alt="Image" title="Click to expand">`;
+                                thumbnailsHTML += `<img src="${{imgSrc}}" class="item-thumbnail" onclick="openImage(this.src)" alt="Image" title="Click to expand">`;
                             }}
                         }});
 
@@ -1128,6 +1235,55 @@ class HTMLReportGenerator:
                 color: #ccc;
             }
 
+            .modal-nav {
+                position: absolute;
+                top: 50%;
+                transform: translateY(-50%);
+                background: rgba(0, 0, 0, 0.5);
+                color: white;
+                border: none;
+                font-size: 30px;
+                padding: 10px 15px;
+                cursor: pointer;
+                border-radius: 3px;
+                transition: all 0.2s;
+                z-index: 1001;
+            }
+
+            .modal-nav:hover {
+                background: rgba(0, 0, 0, 0.8);
+                transform: translateY(-50%) scale(1.1);
+            }
+
+            .modal-nav.prev {
+                left: 20px;
+            }
+
+            .modal-nav.next {
+                right: 20px;
+            }
+
+            .modal-nav:disabled {
+                opacity: 0.3;
+                cursor: not-allowed;
+            }
+
+            .modal-nav:disabled:hover {
+                transform: translateY(-50%);
+                background: rgba(0, 0, 0, 0.5);
+            }
+
+            .modal-counter {
+                position: absolute;
+                bottom: -30px;
+                left: 50%;
+                transform: translateX(-50%);
+                color: white;
+                font-size: 0.9em;
+                font-weight: 600;
+                white-space: nowrap;
+            }
+
             .no-results {
                 padding: 40px 20px;
                 text-align: center;
@@ -1320,7 +1476,10 @@ class HTMLReportGenerator:
             <div id="imageModal" class="modal">
                 <div class="modal-content">
                     <button class="modal-close" onclick="closeModal()">&times;</button>
+                    <button class="modal-nav prev" id="prevImageBtn" onclick="previousImage()" title="Previous image (←)">&lsaquo;</button>
                     <img id="modalImg" class="modal-img" src="" alt="">
+                    <button class="modal-nav next" id="nextImageBtn" onclick="nextImage()" title="Next image (→)">&rsaquo;</button>
+                    <div class="modal-counter"><span id="imageCounter">1 / 1</span></div>
                 </div>
             </div>
 
@@ -1329,16 +1488,71 @@ class HTMLReportGenerator:
                 let filteredData = allData.items.slice();
                 let currentSort = null; // 'priceAsc', 'priceDesc', 'locationAsc', 'locationDesc'
                 let isDescriptionTruncated = {str(truncate_descriptions).lower()};
+                let currentImages = [];
+                let currentImageIndex = 0;
 
                 function openImage(src) {{
                     const modal = document.getElementById('imageModal');
                     const img = document.getElementById('modalImg');
+
+                    // Find all images in current item
+                    const clicked = event.target;
+                    const itemDiv = clicked.closest('.item');
+                    const thumbnails = itemDiv.querySelectorAll('.item-thumbnail');
+                    currentImages = Array.from(thumbnails).map(t => t.src);
+                    currentImageIndex = Array.from(thumbnails).indexOf(clicked);
+
                     img.src = src;
                     modal.classList.add('show');
+                    updateImageNavigation();
+
+                    // Add keyboard navigation
+                    document.addEventListener('keydown', handleImageKeyboard);
                 }}
 
                 function closeModal() {{
                     document.getElementById('imageModal').classList.remove('show');
+                    document.removeEventListener('keydown', handleImageKeyboard);
+                }}
+
+                function previousImage() {{
+                    if (currentImageIndex > 0) {{
+                        currentImageIndex--;
+                        updateImage();
+                    }}
+                }}
+
+                function nextImage() {{
+                    if (currentImageIndex < currentImages.length - 1) {{
+                        currentImageIndex++;
+                        updateImage();
+                    }}
+                }}
+
+                function updateImage() {{
+                    const img = document.getElementById('modalImg');
+                    img.src = currentImages[currentImageIndex];
+                    updateImageNavigation();
+                }}
+
+                function updateImageNavigation() {{
+                    const prevBtn = document.getElementById('prevImageBtn');
+                    const nextBtn = document.getElementById('nextImageBtn');
+                    const counter = document.getElementById('imageCounter');
+
+                    prevBtn.disabled = currentImageIndex === 0;
+                    nextBtn.disabled = currentImageIndex === currentImages.length - 1;
+                    counter.textContent = (currentImageIndex + 1) + ' / ' + currentImages.length;
+                }}
+
+                function handleImageKeyboard(e) {{
+                    if (!document.getElementById('imageModal').classList.contains('show')) return;
+
+                    if (e.key === 'ArrowLeft') {{
+                        previousImage();
+                    }} else if (e.key === 'ArrowRight') {{
+                        nextImage();
+                    }}
                 }}
 
                 function getImages(item) {{
@@ -1527,7 +1741,7 @@ class HTMLReportGenerator:
                         let thumbnailsHTML = '';
                         images.forEach(imgSrc => {{
                             if (imgSrc) {{
-                                thumbnailsHTML += `<img src="${{imgSrc}}" class="item-thumbnail" onclick="openImage('${{imgSrc}}')" alt="Image" title="Click to expand">`;
+                                thumbnailsHTML += `<img src="${{imgSrc}}" class="item-thumbnail" onclick="openImage(this.src)" alt="Image" title="Click to expand">`;
                             }}
                         }});
 

@@ -1,7 +1,10 @@
 ###################################################
 # PC NAS
 ###################################################
-scrape-bazos.exe search --category pc --keyword 'nas' --details-all
+scrape-bazos.exe search \
+    --category pc --sub-category 'pc' \
+    --keyword 'nas' \
+    --details-all
 
 Analyze data in attached json file
  * If price field does not have value, check 'full_description' field and parse value e.g. Cena 27 €.
