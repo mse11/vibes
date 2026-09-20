@@ -112,7 +112,10 @@ The CLI provides multiple commands for different operations:
 scrape-bazos search [OPTIONS]
 
 # Show available categories
-scrape-bazos categories
+scrape-bazos categories-search
+
+# List available prompt template types (for 'prompt --type' / 'search --prompt-template')
+scrape-bazos categories-prompt
 
 # View detailed help
 scrape-bazos search --help
@@ -157,7 +160,7 @@ scrape-bazos search --topic elektronika --keyword "iphone" --pages 2 --display
 scrape-bazos search --topic pc --keyword "monitor" --format csv --output monitors.csv
 
 # View all available categories
-scrape-bazos categories
+scrape-bazos categories-search
 
 ```
 

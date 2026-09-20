@@ -61,7 +61,7 @@ def cli():
 @click.option(
     "--category",
     required=True,
-    help="Category (e.g., pc, auto, reality, elektronika, domacnost, knihy, oblecenie, sport). Required - run 'categories' command to see all available options",
+    help="Category (e.g., pc, auto, reality, elektronika, domacnost, knihy, oblecenie, sport). Required - run 'categories-search' command to see all available options",
 )
 @click.option(
     "--keyword",
@@ -93,7 +93,7 @@ def cli():
 @click.option(
     "--sub-category",
     default=None,
-    help="Optional subcategory/group within category (e.g., 'predam', 'prenajmu' for reality). Run 'categories -s -c <category>' to see available options",
+    help="Optional subcategory/group within category (e.g., 'predam', 'prenajmu' for reality). Run 'categories-search -s -c <category>' to see available options",
 )
 @click.option(
     "--pages-get",
@@ -578,18 +578,18 @@ def search(category, keyword, price_from, price_to, location, radius, sub_catego
     is_flag=True,
     help="Show full URL for each subcategory (requires --show-subcategories)",
 )
-def categories(show_subcategories, category, details_all):
+def categories_search(show_subcategories, category, details_all):
     """
     Show available categories fetched from bazos.sk.
 
     IMPROVED: Auto-detects grouped vs flat subcategories and displays them appropriately.
 
     Examples:
-        scrape-bazos categories                              # List all main categories
-        scrape-bazos categories -s                           # List categories with subcategories
-        scrape-bazos categories -s -c pc                     # Show only PC category with its subcategories
-        scrape-bazos categories -s -c reality                # Show grouped categories (Predaj, Prenájom, etc.)
-        scrape-bazos categories -s -c reality -da            # Show grouped categories with full URLs
+        scrape-bazos categories-search                              # List all main categories
+        scrape-bazos categories-search -s                           # List categories with subcategories
+        scrape-bazos categories-search -s -c pc                     # Show only PC category with its subcategories
+        scrape-bazos categories-search -s -c reality                # Show grouped categories (Predaj, Prenájom, etc.)
+        scrape-bazos categories-search -s -c reality -da            # Show grouped categories with full URLs
     """
     try:
         scraper = BazosScraper()
@@ -713,7 +713,7 @@ def categories(show_subcategories, category, details_all):
                     click.echo(f"\n⚠️  {len(failed_categories)} categor{'y' if len(failed_categories) == 1 else 'ies'} timed out:")
                     for cat_code, error in failed_categories:
                         click.echo(f"   - {cat_code}: {error}")
-                    click.echo(f"\n💡 Tip: Try fetching individual categories with: scrape-bazos categories -s -c {failed_categories[0][0]}")
+                    click.echo(f"\n💡 Tip: Try fetching individual categories with: scrape-bazos categories-search -s -c {failed_categories[0][0]}")
 
         else:
             # Show only main categories (original behavior)
@@ -728,7 +728,7 @@ def categories(show_subcategories, category, details_all):
             for topic, description in sorted(categories_list.items()):
                 click.echo(f"  {click.style(topic.ljust(15), fg='cyan')} → {description}")
             click.echo(f"\n✅ Found {len(categories_list)} categories")
-            click.echo(f"💡 Tip: Use 'scrape-bazos categories -s' to see subcategories")
+            click.echo(f"💡 Tip: Use 'scrape-bazos categories-search -s' to see subcategories")
 
         click.echo()
 
@@ -905,6 +905,60 @@ def convert_format(input, output, category, keyword, no_images, download_images,
     except Exception as e:
         click.echo(f"❌ Error: {e}", err=True)
         raise SystemExit(1)
+
+
+@cli.command(name="categories-prompt")
+@click.option(
+    "--details",
+    "-d",
+    is_flag=True,
+    help="Show full preset details (price tiers, columns, example item, exclusions) for each type",
+)
+def categories_prompt(details):
+    """
+    List the prompt/product types available for 'prompt --type' and
+    'search --prompt-template'.
+
+    This is the 'categories-search' equivalent for LLM prompt templates:
+    each type below is a PromptType member (see prompts.py) with its own
+    fixed table-column layout in PRESETS, rather than a bazos.sk search
+    category.
+
+    Examples:
+        scrape-bazos categories-prompt                # List all prompt template types
+        scrape-bazos categories-prompt -d              # Show full preset details for each type
+    """
+    click.echo("📂 Available Prompt Template Types:\n")
+
+    for prompt_type in PromptType:
+        config = get_preset(prompt_type)
+        click.echo(
+            f"  {click.style(prompt_type.value.ljust(10), fg='cyan')} → {config.product_name}"
+        )
+
+        if details:
+            if prompt_type is PromptType.CUSTOM:
+                click.echo(
+                    f"      {click.style('No fixed preset -- requires --product-name and at least one --price-tier', fg='yellow')}"
+                )
+
+            tiers = ", ".join(f"€{t:g}" for t in config.price_tiers)
+            click.echo(f"      Price tiers: {tiers}")
+            click.echo(
+                f"      Columns: {config.col3_header} | {config.col4_header} | "
+                f"Reason for Selection | {config.col6_header}"
+            )
+            click.echo(f"      Example item: {config.example_item}")
+            if config.exclude_text:
+                click.echo(f"      Excludes: {config.exclude_text}")
+            if config.include_text:
+                click.echo(f"      Includes: {config.include_text}")
+            click.echo()
+
+    click.echo(f"✅ Found {len(PromptType)} prompt template type(s)")
+    click.echo(
+        "💡 Tip: Use 'scrape-bazos prompt --type <type> --print --no-file' to preview a full prompt"
+    )
 
 
 @cli.command(name="prompt")
