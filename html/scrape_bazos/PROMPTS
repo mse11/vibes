@@ -1,34 +1,19 @@
 ###################################################
-# PC NAS
+###################################################
+# QUERY
+###################################################
+###################################################
+
+###################################################
+# QUERY - PC NAS
 ###################################################
 scrape-bazos.exe search \
     --category pc --sub-category 'pc' \
     --keyword 'nas' \
     --details-all
 
-Analyze data in attached json file
- * If price field does not have value, check 'full_description' field and parse value e.g. Cena 27 €.
- * provide list of NAS solutions items worth of money
-   and provide reason why you pick it
- * if provided in description also list:
-    - CPU type, number cores and generations
-    - RAM size and ddr type
-    - STORAGE size
-    - if is suitable for running proxmox jellyfin encoding
- * IMPORTANT: include link from 'item_url' field
-
-Structure example:
-
-Product Name / Model (link to product)
-Price: [Amount]
-Reason for Selection: [Explanation]
-CPU: [Processor Details]
-RAM: [Memory]
-Storage: [Capacity & Type]
-Proxmox / Jellyfin: [Compatibility assessment]
-
 ###################################################
-# PC PC (hp mini pc)
+# QUERY - PC PC (hp mini pc)
 ###################################################
  scrape-bazos.exe search \
     --category pc --sub-category 'pc' \
@@ -37,61 +22,15 @@ Proxmox / Jellyfin: [Compatibility assessment]
     --keyword 'hp engage' \
     --details-all
 
- Analyze data in attached json file
- * Categories items into prizes categories up to 150 Eur, 250 eur, 350Eur, 500 Eur plus.
- * If price field does not have value, check 'full_description' field and parse value e.g. Cena 27 €.
- * in each category list 5 items list of items worth of money
-   and provide reason why you pick it
- * if provided in description also list:
-    - CPU type, number cores and generations
-    - RAM size and ddr type
-    - STORAGE size
-    - if is suitable for running proxmox jellyfin encoding
- * IMPORTANT: include link from 'item_url' field
-
-Structure example:
-
-Product Name / Model (link to product)
-Price: [Amount]
-Reason for Selection: [Explanation]
-CPU: [Processor Details]
-RAM: [Memory]
-Storage: [Capacity & Type]
-Proxmox / Jellyfin: [Compatibility assessment]
-
-
 ###################################################
-# PC NOTAS
+# QUERY - PC NOTAS
 ###################################################
 scrape-bazos.exe search \
     --category 'pc' --sub-category 'notebook' \
     --details-all
 
- Analyze data in attached json file
- * Categories items into prizes categories up to 100 Eur, 250 eur, 350Eur, 500 Eur plus.
- * If price field does not have value, check 'full_description' field and parse value e.g. Cena 27 €.
- * in each category list 5 items list of items worth of money
-   and provide reason why you pick it
- * if provided in description also list:
-    - CPU type, number cores and generations
-    - RAM size and ddr type
-    - STORAGE size
-    - if is suitable for running proxmox jellyfin encoding
- * IMPORTANT: include link from 'item_url' field
-
-Structure example:
-
-Product Name / Model (link to product)
-Price: [Amount]
-Reason for Selection: [Explanation]
-CPU: [Processor Details]
-RAM: [Memory]
-Storage: [Capacity & Type]
-Proxmox / Jellyfin: [Compatibility assessment]
-
-
 ###################################################
-# PC NOTAS (4 SLOTS)
+# QUERY - PC NOTAS (4 SLOTS)
 ###################################################
 scrape-bazos.exe search \
     --category 'pc' --sub-category 'notebook' \
@@ -108,31 +47,55 @@ scrape-bazos.exe search \
     --details-all
 
 ###################################################
-# PC MEMORY
+# QUERY - PC MEMORY
 ###################################################
 scrape-bazos.exe search \
-    --category pc --sub-category 'pamet'
+    --category pc --sub-category 'pamet' \
     --keyword 'DDR4' \
     --details-all
 
- Analyze data in attached json file
- * Categories items into prizes categories up to 100 Eur, 250 eur, 350Eur, 500 Eur plus.
- * If price field does not have value, check 'full_description' field and parse value e.g. Cena 27 €.
- * in each category list 5 items list of items worth of money
-   and provide reason why you pick it
- * if provided in description also list:
-    - CPU type, number cores and generations
-    - RAM size and ddr type
-    - STORAGE size
-    - if is suitable for running proxmox jellyfin encoding
- * IMPORTANT: include link from 'item_url' field
+###################################################
+###################################################
+# PROMPT
+###################################################
+###################################################
 
-Structure example:
+###################################################
+# PROMPT - PC / NOTEBOOK
+###################################################
 
-Product Name / Model (link to product)
-Price: [Amount]
-Reason for Selection: [Explanation]
-CPU: [Processor Details]
-RAM: [Memory]
-Storage: [Capacity & Type]
-Proxmox / Jellyfin: [Compatibility assessment]
+Please analyze the provided dataset or listings and organize the recommended computers into separate section tables based on price categories (**Up to €150**, **€151 – €250**, **€251 – €350**, and **€500+**).
+
+For **each category**, create a Markdown table containing the following exact columns:
+
+| Model & Link | Price & Location | CPU Specs | RAM & Storage | Reason for Selection | Proxmox & Jellyfin Fit |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+
+**Formatting Rules:**
+1. Use standard bold text for each category title above its respective table.
+2. Embed the direct URL inside the **Model & Link** column using valid Markdown syntax (e.g., `[HP EliteDesk 800 G4](https://direct-link-url.com)`). Ensure full `https://` URLs are used with no trailing space or search query wrappers.
+3. Do not include any external system citation tags or inline metadata.
+4. Keep descriptions concise and punchy so the table remains easy to read.
+5. Jump straight into the first category table without any introductory text.
+
+
+###################################################
+# PROMPT - RAM
+###################################################
+
+Please analyze the provided dataset or listings and organize the recommended **RAM memory modules (DIMM and SO-DIMM)** into separate section tables based on price categories (**Up to €50**, **€51 – €100**, **€101 – €200**, and **€201+**).
+
+**Strict Exclusion:** Do NOT include complete PCs, laptops/notebooks, or mini PCs. Only list individual RAM modules or factory-sealed RAM kits.
+
+For **each category**, create a Markdown table containing the following exact columns:
+
+| Model & Link | Price & Location | RAM Specs (Type & Speed) | Capacity & Configuration | Reason for Selection | Compatibility & Ideal Use Case |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+
+**Formatting Rules:**
+1. Use standard bold text for each category title above its respective table.
+2. Embed the direct URL inside the **Model & Link** column using valid Markdown syntax (e.g., `[Corsair Vengeance LPX 32GB](https://direct-link-url.com)`). Ensure full `https://` URLs are used with no trailing space or search query wrappers.
+3. Explicitly note the form factor in the **RAM Specs** column (e.g., *DDR4-3200 MHz DIMM* for desktops or *DDR5-4800 MHz SO-DIMM* for mini PCs/laptops).
+4. Do not include any external system citation tags or inline metadata.
+5. Keep descriptions concise and punchy so the table remains easy to read.
+6. Jump straight into the first category table without any introductory text.

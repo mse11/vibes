@@ -15,14 +15,16 @@ import re
 
 @dataclass
 class BazosItemDetails:
-    """Represents detailed information fetched from an item's detail page"""
+    """Represents detailed information fetched from an item's detail page
 
-    full_url: Optional[str] = None
+    Note: The item URL is stored in the parent BazosItem.item_url field
+    """
+
     image_urls: List[str] = field(default_factory=list)
     full_description: Optional[str] = None
 
     def __repr__(self) -> str:
-        return f"BazosItemDetails(images={len(self.image_urls)}, desc_len={len(self.full_description) if self.full_description else 0}, url={self.full_url})"
+        return f"BazosItemDetails(images={len(self.image_urls)}, desc_len={len(self.full_description) if self.full_description else 0})"
 
 
 @dataclass
@@ -767,7 +769,6 @@ class BazosScraper:
             item.item_details = BazosItemDetails(
                 image_urls=image_urls,
                 full_description=full_description,
-                full_url=url,
             )
 
             print(f"  ✓ Fetched details for: {item.title[:50]}...")
@@ -778,13 +779,9 @@ class BazosScraper:
 
         except Exception as e:
             print(f"  ⚠ Error fetching details for {item.item_url}: {e}")
-            # Return item with empty details but still store the full URL
-            # Reconstruct full URL in case of error
-            full_url = item.item_url
-            if not full_url.startswith("http"):
-                category = item.category.lower() if item.category else "www"
-                full_url = f"https://{category}.bazos.sk{full_url}"
-            item.item_details = BazosItemDetails(full_url=full_url)
+            # Return item with empty details
+            # URL is available from the parent BazosItem.item_url field
+            item.item_details = BazosItemDetails()
             return item
 
     def get_categories(self) -> Dict[str, str]:
