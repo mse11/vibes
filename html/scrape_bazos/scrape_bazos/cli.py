@@ -5,9 +5,44 @@ CLI interface for Bazos.sk scraper using Click
 import click
 import csv
 import json
+import re
 from pathlib import Path
 from .scraper import BazosScraper
 from .reporter import HTMLReportGenerator
+from .prompts import PromptType, get_preset, render_prompt, render_prompt_block
+
+# All files the CLI writes by default (search/convert-format/prompt
+# output, downloaded images) land under this directory instead of the
+# current working directory, so a scrape session doesn't scatter files
+# around wherever the command happened to be run from.
+GENERATED_DIR = "generated"
+
+
+def _generated_path(filename: str) -> str:
+    """
+    Resolve an output *file* path, redirecting a bare filename (no
+    directory component) into GENERATED_DIR. A path the caller already
+    qualified with a directory -- relative (e.g. 'out/report.html') or
+    absolute -- is respected as-is. Either way, the destination directory
+    is created if it doesn't exist yet.
+
+    Returned with forward slashes (Path.as_posix()) regardless of OS:
+    Windows file APIs accept '/' just fine, and it keeps output readable
+    in Git Bash / WSL / cross-platform logs instead of printing '\\'.
+    """
+    path = Path(filename)
+    target = path if path.parent != Path(".") else Path(GENERATED_DIR) / filename
+    target.parent.mkdir(parents=True, exist_ok=True)
+    return target.as_posix()
+
+
+def _generated_dir(dirname: str) -> str:
+    """Same redirection rule as `_generated_path`, but for a *directory*
+    (e.g. --images-dir): the directory itself is created, not just its parent."""
+    path = Path(dirname)
+    target = path if path.parent != Path(".") else Path(GENERATED_DIR) / dirname
+    target.mkdir(parents=True, exist_ok=True)
+    return target.as_posix()
 
 
 @click.group()
@@ -70,7 +105,7 @@ def cli():
     "--output",
     default="",
     type=str,
-    help="Output filename (default: bazos_results_<category>_<keyword>.json)",
+    help="Output filename (default: bazos_results_<category>_<keyword>.json). A bare filename is written under generated/; give a path to save elsewhere.",
 )
 @click.option(
     "--format",
@@ -125,14 +160,26 @@ def cli():
     "--images-dir",
     default="images",
     type=str,
-    help="Directory to save downloaded images (default: images, only applies to --format html)",
+    help="Directory to save downloaded images (default: generated/images, only applies to --format html)",
 )
 @click.option(
     "--truncate-descriptions",
     is_flag=True,
     help="Truncate descriptions to 2 lines in HTML report (only applies to --format html)",
 )
-def search(category, keyword, price_from, price_to, location, radius, sub_category, pages_get, output, format, timeout, max_retries, retry_delay, display, pages_count, details_all, no_images, download_images, images_dir, truncate_descriptions):
+@click.option(
+    "--prompt-template",
+    type=click.Choice([t.value for t in PromptType]),
+    default=None,
+    help=(
+        "Also dump a matching LLM analysis prompt (see 'prompt') as a "
+        ".md file alongside the results, e.g. generated/<output-name>.md. "
+        "Must name an existing preset (pc, notebook, pamat, sodimm, udimm, "
+        "rdimm, hdd-ssd); 'custom' has no fixed preset content and is "
+        "skipped with a warning."
+    ),
+)
+def search(category, keyword, price_from, price_to, location, radius, sub_category, pages_get, output, format, timeout, max_retries, retry_delay, display, pages_count, details_all, no_images, download_images, images_dir, truncate_descriptions, prompt_template):
     """
     Search for listings on bazos.sk
 
@@ -179,6 +226,9 @@ def search(category, keyword, price_from, price_to, location, radius, sub_catego
         scrape-bazos search --category reality --keyword "byt" --location "Bratislava" --radius 10 --format csv
 
         scrape-bazos search --category pc --keyword "nas" --pages-get 2 --details-all --display
+
+        # Also dump a matching LLM prompt (generated/bazos_report_dynamic_pc_pamet_DDR4.md)
+        scrape-bazos search --category pc --sub-category pamet --keyword "DDR4" --prompt-template pamat
     """
     try:
         # Validate HTML-specific options
@@ -295,6 +345,10 @@ def search(category, keyword, price_from, price_to, location, radius, sub_catego
                 output = f"bazos_results_{category_part}_{keywords_str}.txt"
             else:  # json
                 output = f"bazos_results_{category_part}_{keywords_str}.json"
+
+        # All output (auto-named or an explicit bare filename) lands under
+        # generated/ unless the caller already qualified it with a directory
+        output = _generated_path(output)
 
         # Show what we're searching for
         click.echo(f"🔍 Searching for keywords: {click.style(', '.join(keyword), bold=True)}\n")
@@ -429,6 +483,7 @@ def search(category, keyword, price_from, price_to, location, radius, sub_catego
             # Handle image downloading if requested
             image_map = None
             if download_images and not no_images:
+                images_dir = _generated_dir(images_dir)
                 click.echo(f"\n🖼️  Downloading images to '{images_dir}' directory...\n")
                 try:
                     from .reporter import ImageDownloader
@@ -467,14 +522,31 @@ def search(category, keyword, price_from, price_to, location, radius, sub_catego
                     truncate_descriptions=truncate_descriptions,
                 )
 
-            # Also save JSON file when using HTML formats
-            json_output = Path(html_output).stem + ".json"
+            # Also save JSON file when using HTML formats, right alongside
+            # the HTML report (html_output is already under generated/)
+            json_output = Path(html_output).with_suffix(".json").as_posix()
             click.echo(f"💾 Also saving JSON file: {click.style(json_output, bold=True)}")
             scraper.save_results(items, json_output)
 
             output = html_output
             if download_images and not no_images:
                 click.echo(f"🖼️  Images saved to: {click.style(images_dir, bold=True)}")
+
+        # Optionally also dump a matching LLM analysis prompt, named after
+        # the results file (e.g. generated/bazos_report_dynamic_pc_pamet_DDR4.md)
+        if prompt_template:
+            template_type = PromptType(prompt_template)
+            if template_type is PromptType.CUSTOM:
+                click.echo(
+                    "⚠️  --prompt-template custom has no preset content; "
+                    "use 'scrape-bazos prompt --type custom ...' directly to build one.",
+                    err=False,
+                )
+            else:
+                prompt_output = Path(output).with_suffix(".md").as_posix()
+                with open(prompt_output, "w", encoding="utf-8") as f:
+                    f.write(render_prompt(get_preset(template_type)))
+                click.echo(f"📝 Prompt saved to: {click.style(prompt_output, bold=True)}")
 
         click.echo(f"💾 Results saved to: {click.style(output, bold=True)}")
         click.echo(f"📊 Results contain: {click.style(str(len(items)), bold=True)} items")
@@ -679,7 +751,7 @@ def categories(show_subcategories, category, details_all):
     "-o",
     default=None,
     type=str,
-    help="Output filename. Format auto-detected from extension (.html, .csv, .json). Default: report_{input_name}.html",
+    help="Output filename. Format auto-detected from extension (.html, .csv, .json). Default: report_{input_name}.html. A bare filename is written under generated/.",
 )
 @click.option(
     "--category",
@@ -707,7 +779,7 @@ def categories(show_subcategories, category, details_all):
     "--images-dir",
     default="images",
     type=str,
-    help="Directory to save downloaded images (default: images, HTML format only)",
+    help="Directory to save downloaded images (default: generated/images, HTML format only)",
 )
 @click.option(
     "--truncate-descriptions",
@@ -766,6 +838,11 @@ def convert_format(input, output, category, keyword, no_images, download_images,
             elif format == "json":
                 output = f"report_{input_stem}.json"
 
+        # A bare filename (auto-derived or an explicit --output with no
+        # directory) lands under generated/; an explicit path is respected
+        if output:
+            output = _generated_path(output)
+
         # Warn about image options for non-HTML formats
         if format != "html" and (no_images or download_images):
             click.echo(f"⚠️  Note: --no-images and --download-images only apply to HTML format", err=False)
@@ -778,6 +855,7 @@ def convert_format(input, output, category, keyword, no_images, download_images,
             # Handle image downloading if requested
             image_map = None
             if download_images and not no_images:
+                images_dir = _generated_dir(images_dir)
                 click.echo(f"🖼️  Downloading images to '{images_dir}' directory...\n")
                 try:
                     from .reporter import ImageDownloader
@@ -823,6 +901,195 @@ def convert_format(input, output, category, keyword, no_images, download_images,
         raise SystemExit(1)
     except json.JSONDecodeError:
         click.echo(f"❌ Invalid JSON file: {input}", err=True)
+        raise SystemExit(1)
+    except Exception as e:
+        click.echo(f"❌ Error: {e}", err=True)
+        raise SystemExit(1)
+
+
+@cli.command(name="prompt")
+@click.option(
+    "--type",
+    "prompt_type",
+    type=click.Choice([t.value for t in PromptType]),
+    default=PromptType.CUSTOM.value,
+    help=(
+        "Prompt/product type (default: custom). Each type's table columns "
+        "are fixed in code: pc/notebook use CPU Specs + RAM & Storage + "
+        "Proxmox & Jellyfin Fit, pamat (any RAM) / sodimm (notebook "
+        "SO-DIMM only) / rdimm (server RDIMM, always ECC) use RAM Specs + "
+        "Capacity & Configuration + Compatibility & Ideal Use Case, udimm "
+        "(desktop UDIMM, ECC or non-ECC) additionally calls out ECC status "
+        "in its RAM Specs column, hdd-ssd uses Disk Specs + Capacity & "
+        "Form Factor + Compatibility & Ideal Use Case, and custom uses the "
+        "generic Key Specifications + Capacity & Configuration + "
+        "Compatibility & Ideal Use Case. Column headers are not "
+        "configurable from the CLI -- add a new PromptType in prompts.py "
+        "for a genuinely new column layout."
+    ),
+)
+@click.option(
+    "--product-name",
+    default=None,
+    help="Product name/type shown in the prompt's opening sentence, e.g. 'RAM memory modules'. Required for --type custom.",
+)
+@click.option(
+    "--price-tier",
+    "price_tiers",
+    multiple=True,
+    type=float,
+    help="Price breakpoint in EUR. Repeat to add tiers, e.g. --price-tier 150 --price-tier 250 --price-tier 350. N breakpoints create N+1 price categories. Overrides the preset's tiers; required for --type custom.",
+)
+@click.option(
+    "--exclude",
+    default=None,
+    help="Items to strictly exclude, rendered as a 'Strict Exclusion' note. Overrides the preset.",
+)
+@click.option(
+    "--include",
+    default=None,
+    help="The only acceptable items (paired with --exclude). Overrides the preset.",
+)
+@click.option(
+    "--extra-rule",
+    "extra_rules",
+    multiple=True,
+    help="Extra formatting rule appended after the standard ones. Repeat for multiple.",
+)
+@click.option(
+    "--no-variant-notes",
+    is_flag=True,
+    help="Omit the 'Handling Multi-Item / Variant Listings' section",
+)
+@click.option(
+    "--title",
+    default=None,
+    help="Section title used in the PROMPTS-style banner (with --append-to-prompts) and the default output filename",
+)
+@click.option(
+    "--output",
+    "-o",
+    default=None,
+    type=str,
+    help="Output .md file to write (default: generated/prompt_<product-name-slug>.md). A bare filename is written under generated/. Ignored with --no-file.",
+)
+@click.option(
+    "--no-file",
+    is_flag=True,
+    help="Don't write an output .md file (useful together with --print and/or --append-to-prompts)",
+)
+@click.option(
+    "--append-to-prompts",
+    "append_to",
+    default=None,
+    type=str,
+    help="Also append the generated prompt, wrapped in a '# PROMPT - <title>' banner like the PROMPTS file, to this file",
+)
+@click.option(
+    "--print",
+    "print_stdout",
+    is_flag=True,
+    help="Print the generated prompt to the console",
+)
+def prompt(
+    prompt_type,
+    product_name,
+    price_tiers,
+    exclude,
+    include,
+    extra_rules,
+    no_variant_notes,
+    title,
+    output,
+    no_file,
+    append_to,
+    print_stdout,
+):
+    """
+    Dump a ready-to-paste Markdown prompt for an LLM.
+
+    Generates the "organize these listings into price-tiered Markdown
+    tables" analysis prompt (the same kind of prompt hand-written in the
+    PROMPTS file) so it can feed an LLM alongside a JSON export from
+    'search' or 'convert-format', instead of being copy/pasted by hand.
+
+    Table columns are determined entirely by --type (a PromptType defined
+    in prompts.py) -- this command only ever fills in content (product
+    name, price ladder, exclusions, extra rules), never column headers.
+
+    Examples:
+
+        # Use a built-in type as-is
+        scrape-bazos prompt --type pamat
+
+        # Same type, different price ladder
+        scrape-bazos prompt --type pc --price-tier 200 --price-tier 400 --price-tier 600
+
+        # New product type using the generic column layout
+        scrape-bazos prompt --type custom --product-name "graphics cards" \\
+            --price-tier 150 --price-tier 300 --price-tier 500 \\
+            --exclude "prebuilt PCs or laptops with a GPU inside" \\
+            --include "standalone desktop graphics cards"
+
+        # Print instead of/as well as saving, and also append to PROMPTS
+        scrape-bazos prompt --type hdd-ssd --print --append-to-prompts PROMPTS
+    """
+    try:
+        prompt_type = PromptType(prompt_type)
+
+        if prompt_type is PromptType.CUSTOM:
+            if not product_name:
+                click.echo("❌ --product-name is required when --type custom", err=True)
+                raise SystemExit(1)
+            if not price_tiers:
+                click.echo("❌ At least one --price-tier is required when --type custom", err=True)
+                raise SystemExit(1)
+
+        config = get_preset(prompt_type)
+        if product_name:
+            config.product_name = product_name
+        if price_tiers:
+            config.price_tiers = list(price_tiers)
+        if exclude:
+            config.exclude_text = exclude
+        if include:
+            config.include_text = include
+        if extra_rules:
+            config.extra_rules = list(config.extra_rules) + list(extra_rules)
+        if no_variant_notes:
+            config.include_variant_notes = False
+
+        # Re-validate/normalize (sorts price tiers, fills in col3_note if unset)
+        config.__post_init__()
+
+        prompt_title = title or (
+            prompt_type.value.upper()
+            if prompt_type is not PromptType.CUSTOM
+            else config.product_name.upper()
+        )
+
+        prompt_md = render_prompt(config)
+
+        if not no_file:
+            if not output:
+                slug = re.sub(r"[^a-z0-9]+", "_", config.product_name.lower()).strip("_")
+                output = f"prompt_{slug}.md"
+            output = _generated_path(output)
+            with open(output, "w", encoding="utf-8") as f:
+                f.write(prompt_md)
+            click.echo(f"💾 Prompt saved to: {click.style(output, bold=True)}")
+
+        if append_to:
+            block = render_prompt_block(prompt_title, config)
+            with open(append_to, "a", encoding="utf-8") as f:
+                f.write("\n" + block)
+            click.echo(f"📎 Appended to: {click.style(append_to, bold=True)}")
+
+        if print_stdout or (no_file and not append_to):
+            click.echo("\n" + prompt_md)
+
+    except ValueError as e:
+        click.echo(f"❌ {e}", err=True)
         raise SystemExit(1)
     except Exception as e:
         click.echo(f"❌ Error: {e}", err=True)

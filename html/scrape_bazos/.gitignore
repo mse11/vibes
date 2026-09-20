@@ -132,3 +132,7 @@ report.html
 *.html
 /outputs/
 /Claude outputs/
+
+# All CLI-generated output (search/convert-format/dump-prompt results,
+# downloaded images) lands here by default -- see scrape_bazos/cli.py
+/generated/

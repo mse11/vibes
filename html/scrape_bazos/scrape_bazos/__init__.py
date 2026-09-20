@@ -9,9 +9,14 @@ __email__ = "michal.sestrienka@gmail.com"
 
 from .scraper import BazosScraper, BazosItem
 from .reporter import HTMLReportGenerator
+from .prompts import PromptConfig, render_prompt, render_prompt_block, PRESETS
 
 __all__ = [
     "BazosScraper",
     "BazosItem",
     "HTMLReportGenerator",
+    "PromptConfig",
+    "render_prompt",
+    "render_prompt_block",
+    "PRESETS",
 ]
