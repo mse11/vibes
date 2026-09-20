@@ -69,3 +69,11 @@ scrape-bazos.exe search \
     --prompt-template 'disk-hdd' \
     --prompt-template 'disk-ssd' \
     --details-all
+
+###################################################
+# QUERY - DETI AUTOSEDACKA
+###################################################
+scrape-bazos.exe search \
+    --category deti --sub-category 'autosedacky' \
+    --keyword '' \
+    --details-all

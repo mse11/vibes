@@ -838,7 +838,13 @@ def categories_search(show_subcategories, category, details_all):
     is_flag=True,
     help="Truncate descriptions to 2 lines in HTML report (HTML format only)",
 )
-def convert_format(input, output, category, keyword, no_images, download_images, images_dir, truncate_descriptions):
+@click.option(
+    "--static",
+    is_flag=True,
+    help="Produce the plain static HTML list instead of the interactive report "
+         "with filtering and sorting (HTML format only)",
+)
+def convert_format(input, output, category, keyword, no_images, download_images, images_dir, truncate_descriptions, static):
     """
     Convert scraped data between formats
 
@@ -846,11 +852,18 @@ def convert_format(input, output, category, keyword, no_images, download_images,
     and converts it to various output formats (HTML, CSV, JSON).
     Format is automatically detected from the output file extension.
 
+    A '.html' output produces the interactive report with cascading
+    keyword filters, price/location filters and sorting -- the same
+    report 'search --format html_dynamic' generates. Pass --static for
+    the plain, non-interactive list instead.
+
     Examples:
 
         scrape-bazos convert-format --input bazos_results.json -o report.html
 
         scrape-bazos convert-format -i results.json -o my_report.html --category pc --keyword "nas"
+
+        scrape-bazos convert-format -i results.json -o plain.html --static
 
         scrape-bazos convert-format -i results.json -o data.csv
 
@@ -874,34 +887,69 @@ def convert_format(input, output, category, keyword, no_images, download_images,
             click.echo("❌ JSON file format not recognized. Expected array of items or object with 'items' key.", err=True)
             raise SystemExit(1)
 
-        # Convert dictionaries to BazosItem objects
-        from .scraper import BazosItem
-        items = [BazosItem(**item) if isinstance(item, dict) else item for item in items_data]
+        # Convert dictionaries to BazosItem objects.
+        # 'search' writes items with asdict(), so nested item_details comes
+        # back as a plain dict -- rebuild it as BazosItemDetails, otherwise
+        # every later item.item_details.<attr> access blows up.
+        from .scraper import BazosItem, BazosItemDetails
+
+        def _to_item(raw):
+            if not isinstance(raw, dict):
+                return raw
+            fields = dict(raw)
+            details = fields.pop("item_details", None)
+            if isinstance(details, dict):
+                details = BazosItemDetails(
+                    image_urls=details.get("image_urls") or [],
+                    full_description=details.get("full_description"),
+                )
+            # Tolerate flat JSON that carries the detail fields at top level
+            flat_images = fields.pop("image_urls", None)
+            flat_desc = fields.pop("full_description", None)
+            if details is None and (flat_images or flat_desc):
+                details = BazosItemDetails(
+                    image_urls=flat_images or [],
+                    full_description=flat_desc,
+                )
+            if details is not None:
+                fields["item_details"] = details
+            return BazosItem(**fields)
+
+        items = [_to_item(item) for item in items_data]
 
         click.echo(f"✅ Loaded {len(items)} items\n")
 
-        # Determine output filename based on format
+        # Determine the output format from the output file extension, as the
+        # help text promises. Previously this function compared an undefined
+        # name 'format' (which resolved to the Python builtin), so no branch
+        # ever ran and the command reported success while writing nothing.
         input_stem = Path(input).stem
         if output is None:
-            if format == "html":
-                output = f"report_{input_stem}.html"
-            elif format == "csv":
-                output = f"report_{input_stem}.csv"
-            elif format == "json":
-                output = f"report_{input_stem}.json"
+            output = f"report_{input_stem}.html"
+
+        suffix = Path(output).suffix.lower()
+        extension_formats = {".html": "html", ".htm": "html", ".csv": "csv", ".json": "json"}
+        if suffix not in extension_formats:
+            click.echo(
+                f"❌ Cannot tell the output format from '{output}'. "
+                f"Use a .html, .csv or .json extension.",
+                err=True,
+            )
+            raise SystemExit(1)
+        output_format = extension_formats[suffix]
 
         # A bare filename (auto-derived or an explicit --output with no
         # directory) lands under generated/; an explicit path is respected
-        if output:
-            output = _generated_path(output)
+        output = _generated_path(output)
 
-        # Warn about image options for non-HTML formats
-        if format != "html" and (no_images or download_images):
+        # Warn about options that only apply to HTML output
+        if output_format != "html" and (no_images or download_images):
             click.echo(f"⚠️  Note: --no-images and --download-images only apply to HTML format", err=False)
+        if output_format != "html" and static:
+            click.echo(f"⚠️  Note: --static only applies to HTML format", err=False)
 
         # Convert to requested format
-        if format == "html":
-            click.echo(f"📄 Converting to HTML format...")
+        if output_format == "html":
             generator = HTMLReportGenerator()
 
             # Handle image downloading if requested
@@ -919,25 +967,39 @@ def convert_format(input, output, category, keyword, no_images, download_images,
                     click.echo("   Will use remote image URLs instead\n")
                     image_map = None
 
-            # Generate HTML report
-            generator.generate_report(
-                items=items,
-                output_file=output,
-                topic=category,
-                keyword=keyword,
-                include_images=not no_images,
-                image_map=image_map,
-                truncate_descriptions=truncate_descriptions,
-            )
+            # Generate HTML report. The interactive report is the default,
+            # matching 'search --format html_dynamic'; --static opts out.
+            if static:
+                click.echo(f"📄 Converting to static HTML format...")
+                generator.generate_report(
+                    items=items,
+                    output_file=output,
+                    topic=category,
+                    keyword=keyword,
+                    include_images=not no_images,
+                    image_map=image_map,
+                    truncate_descriptions=truncate_descriptions,
+                )
+            else:
+                click.echo(f"📄 Converting to dynamic HTML format (filtering + sorting)...")
+                generator.generate_dynamic_report(
+                    items=items,
+                    output_file=output,
+                    topic=category,
+                    keyword=keyword,
+                    include_images=not no_images,
+                    image_map=image_map,
+                    truncate_descriptions=truncate_descriptions,
+                )
 
             if download_images and not no_images:
                 click.echo(f"🖼️  Images saved to: {click.style(images_dir, bold=True)}")
 
-        elif format == "csv":
+        elif output_format == "csv":
             click.echo(f"📄 Converting to CSV format...")
             _save_as_csv(items, output)
 
-        elif format == "json":
+        elif output_format == "json":
             click.echo(f"📄 Converting to JSON format...")
             _save_as_json(items, output)
 

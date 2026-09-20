@@ -3,6 +3,7 @@ HTML Report generator and image downloader for Bazos scraper results
 """
 
 import json
+import re
 from typing import List, Optional
 from datetime import datetime
 from .scraper import BazosItem
@@ -166,6 +167,11 @@ class HTMLReportGenerator:
                 display: flex;
                 flex-direction: column;
                 gap: 8px;
+                /* PERF: skip layout/paint for off-screen items.
+                   'auto' remembers the real size once an item has been rendered,
+                   so the scrollbar stays stable. Ctrl+F still finds the text. */
+                content-visibility: auto;
+                contain-intrinsic-size: auto 260px;
             }
 
             .item:hover {
@@ -224,15 +230,28 @@ class HTMLReportGenerator:
                 display: -webkit-box;
                 -webkit-box-orient: vertical;
                 overflow: hidden;
-                transition: -webkit-line-clamp 0.3s ease;
+            }
+
+            /* PERF: truncation is toggled with ONE class on the container instead of
+               touching every .item-description node. */
+            .items-container.desc-truncated .item-description {
+                -webkit-line-clamp: 2;
+                line-clamp: 2;
+            }
+
+            .items-container.desc-full .item-description {
+                -webkit-line-clamp: unset;
+                line-clamp: unset;
             }
 
             .item-description.truncated {
                 -webkit-line-clamp: 2;
+                line-clamp: 2;
             }
 
             .item-description.full {
                 -webkit-line-clamp: unset;
+                line-clamp: unset;
             }
 
             .item-images {
@@ -456,16 +475,18 @@ class HTMLReportGenerator:
                 let currentImages = [];
                 let currentImageIndex = 0;
 
-                function openImage(src) {{
+                // `el` is passed by the delegated click handler; the fallback keeps
+                // any inline onclick="openImage(this.src)" working.
+                function openImage(src, el) {{
                     const modal = document.getElementById('imageModal');
                     const img = document.getElementById('modalImg');
 
                     // Find all images in current item
-                    const clicked = event.target;
-                    const itemDiv = clicked.closest('.item');
-                    const thumbnails = itemDiv.querySelectorAll('.item-thumbnail');
-                    currentImages = Array.from(thumbnails).map(t => t.src);
-                    currentImageIndex = Array.from(thumbnails).indexOf(clicked);
+                    const clicked = el || (typeof event !== 'undefined' && event ? event.target : null);
+                    const itemDiv = clicked ? clicked.closest('.item') : null;
+                    const thumbnails = itemDiv ? Array.from(itemDiv.querySelectorAll('.item-thumbnail')) : [];
+                    currentImages = thumbnails.map(t => t.src);
+                    currentImageIndex = Math.max(0, thumbnails.indexOf(clicked));
 
                     img.src = src;
                     modal.classList.add('show');
@@ -527,10 +548,13 @@ class HTMLReportGenerator:
                     return [item.image_url];
                 }}
 
+                // PERF: pure-string escaping. The old version created a DOM node per
+                // call (~5 per item = thousands of throwaway elements per render).
+                const HTML_ESCAPES = {{ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }};
                 function escapeHtml(text) {{
-                    const div = document.createElement('div');
-                    div.textContent = text;
-                    return div.innerHTML;
+                    if (text === null || text === undefined) return '';
+                    const s = typeof text === 'string' ? text : String(text);
+                    return /[&<>"']/.test(s) ? s.replace(/[&<>"']/g, c => HTML_ESCAPES[c]) : s;
                 }}
 
                 function truncateText(text, maxLength = 180) {{
@@ -540,20 +564,19 @@ class HTMLReportGenerator:
                     return text;
                 }}
 
+                // PERF: flipping one class on the container beats walking every
+                // .item-description node (see the .items-container.desc-* CSS rules).
+                function applyTruncationClass() {{
+                    const container = document.getElementById('items');
+                    container.classList.toggle('desc-truncated', isDescriptionTruncated);
+                    container.classList.toggle('desc-full', !isDescriptionTruncated);
+                }}
+
                 function toggleDescriptionTruncation() {{
                     isDescriptionTruncated = !isDescriptionTruncated;
-                    const descriptions = document.querySelectorAll('.item-description');
                     const button = document.getElementById('descriptionToggle');
 
-                    descriptions.forEach(desc => {{
-                        if (isDescriptionTruncated) {{
-                            desc.classList.remove('full');
-                            desc.classList.add('truncated');
-                        }} else {{
-                            desc.classList.remove('truncated');
-                            desc.classList.add('full');
-                        }}
-                    }});
+                    applyTruncationClass();
 
                     // Update button appearance
                     if (isDescriptionTruncated) {{
@@ -565,7 +588,38 @@ class HTMLReportGenerator:
                     }}
 
                     // Save preference to localStorage
-                    localStorage.setItem('descriptionTruncated', isDescriptionTruncated);
+                    try {{
+                        localStorage.setItem('descriptionTruncated', isDescriptionTruncated);
+                    }} catch (e) {{
+                        // localStorage not available
+                    }}
+                }}
+
+                function buildItemHTML(item) {{
+                    const images = getImages(item);
+                    const description = (item.full_description || item.description || '').replace(/\\r\\n/g, ' ').replace(/\\s+/g, ' ').trim();
+
+                    let thumbnailsHTML = '';
+                    for (let i = 0; i < images.length; i++) {{
+                        const imgSrc = images[i];
+                        if (imgSrc) {{
+                            // PERF: lazy + async decode keeps the browser from firing
+                            // thousands of image requests at once; the click is handled
+                            // by one delegated listener instead of an inline handler.
+                            thumbnailsHTML += '<img src="' + escapeHtml(imgSrc) + '" class="item-thumbnail" loading="lazy" decoding="async" alt="Image" title="Click to expand">';
+                        }}
+                    }}
+
+                    return '<div class="item">'
+                        + '<div class="item-header">'
+                        + '<h3 class="item-title"><a href="' + escapeHtml(item.item_url) + '" target="_blank" rel="noopener">' + escapeHtml(item.title) + '</a></h3>'
+                        + '<span class="meta-price">' + escapeHtml(item.price) + '</span>'
+                        + '<span class="meta-location">📍 ' + escapeHtml(item.location) + '</span>'
+                        + '<span class="meta-date">📅 ' + escapeHtml(item.date_posted) + '</span>'
+                        + '</div>'
+                        + '<p class="item-description">' + escapeHtml(description) + '</p>'
+                        + '<div class="item-images">' + thumbnailsHTML + '</div>'
+                        + '</div>';
                 }}
 
                 function renderItems() {{
@@ -576,52 +630,34 @@ class HTMLReportGenerator:
                     summary.textContent = data.total_items + ' items • ' + data.timestamp;
                     totalItemsDisplay.textContent = data.total_items;
 
-                    data.items.forEach((item, index) => {{
-                        const images = getImages(item);
-                        const description = (item.full_description || item.description || '').replace(/\\r\\n/g, ' ').replace(/\\s+/g, ' ').trim();
-
-                        let thumbnailsHTML = '';
-                        images.forEach(imgSrc => {{
-                            if (imgSrc) {{
-                                thumbnailsHTML += `<img src="${{imgSrc}}" class="item-thumbnail" onclick="openImage(this.src)" alt="Image" title="Click to expand">`;
-                            }}
-                        }});
-
-                        const descClass = isDescriptionTruncated ? 'truncated' : 'full';
-
-                        const itemHTML = `
-                            <div class="item">
-                                <div class="item-header">
-                                    <h3 class="item-title">
-                                        <a href="${{item.item_url}}" target="_blank">${{escapeHtml(item.title)}}</a>
-                                    </h3>
-                                    <span class="meta-price">${{escapeHtml(item.price)}}</span>
-                                    <span class="meta-location">📍 ${{escapeHtml(item.location)}}</span>
-                                    <span class="meta-date">📅 ${{escapeHtml(item.date_posted)}}</span>
-                                </div>
-                                <p class="item-description ${{descClass}}">${{escapeHtml(description)}}</p>
-                                <div class="item-images">
-                                    ${{thumbnailsHTML}}
-                                </div>
-                            </div>
-                        `;
-
-                        container.innerHTML += itemHTML;
-                    }});
-
-                    // Initialize button state
-                    const button = document.getElementById('descriptionToggle');
-                    if (!isDescriptionTruncated) {{
-                        button.classList.add('full');
-                        button.textContent = '📄 Full';
+                    // PERF: build the whole list as one string and parse it ONCE.
+                    // The old `container.innerHTML += itemHTML` inside the loop
+                    // re-parsed and re-laid-out the entire list on every iteration
+                    // (O(n^2)); at 1300+ items that is minutes of work.
+                    const parts = new Array(data.items.length);
+                    for (let i = 0; i < data.items.length; i++) {{
+                        parts[i] = buildItemHTML(data.items[i]);
                     }}
-                    button.addEventListener('click', toggleDescriptionTruncation);
+                    container.innerHTML = parts.join('');
+                    itemNodes = Array.prototype.slice.call(container.children);
+
+                    applyTruncationClass();
+                    measureHeaderOffset();
+                    schedulePositionUpdate();
                 }}
 
                 // Modal click outside to close
                 document.getElementById('imageModal').addEventListener('click', function(e) {{
                     if (e.target === this) {{
                         closeModal();
+                    }}
+                }});
+
+                // PERF: one delegated listener for every thumbnail in the list.
+                document.getElementById('items').addEventListener('click', function(e) {{
+                    const target = e.target;
+                    if (target && target.classList && target.classList.contains('item-thumbnail')) {{
+                        openImage(target.src, target);
                     }}
                 }});
 
@@ -635,22 +671,65 @@ class HTMLReportGenerator:
                     sizeDisplay.textContent = size + 'px';
                 }});
 
-                // Track scroll position
-                window.addEventListener('scroll', function() {{
-                    const items = document.querySelectorAll('.item');
-                    const headerHeight = document.querySelector('.header').offsetHeight + 50;
+                // ===== PERF: scroll position counter =====
+                // Old version read getBoundingClientRect() for EVERY item on EVERY
+                // scroll event (1300+ forced layout reads per event). Now the handler
+                // is rAF-throttled and binary-searches the item list, so it touches
+                // ~log2(n) ≈ 11 elements per frame.
+                let itemNodes = [];
+                let positionTickScheduled = false;
+                let headerOffset = 0;
 
-                    let currentItemIndex = 1;
+                function measureHeaderOffset() {{
+                    const header = document.querySelector('.header');
+                    headerOffset = (header ? header.offsetHeight : 0) + 60;
+                }}
 
-                    items.forEach((item, index) => {{
-                        const rect = item.getBoundingClientRect();
-                        if (rect.top < headerHeight + 10) {{
-                            currentItemIndex = index + 1;
+                function updatePositionCounter() {{
+                    const counter = document.getElementById('currentItem');
+                    if (!counter) return;
+                    const n = itemNodes.length;
+                    if (n === 0) {{
+                        counter.textContent = '0';
+                        return;
+                    }}
+
+                    let lo = 0, hi = n - 1, found = 0;
+                    while (lo <= hi) {{
+                        const mid = (lo + hi) >> 1;
+                        if (itemNodes[mid].getBoundingClientRect().top < headerOffset) {{
+                            found = mid;
+                            lo = mid + 1;
+                        }} else {{
+                            hi = mid - 1;
                         }}
-                    }});
+                    }}
 
-                    document.getElementById('currentItem').textContent = currentItemIndex;
-                }});
+                    counter.textContent = found + 1;
+                }}
+
+                function schedulePositionUpdate() {{
+                    if (positionTickScheduled) return;
+                    positionTickScheduled = true;
+                    requestAnimationFrame(function() {{
+                        positionTickScheduled = false;
+                        updatePositionCounter();
+                    }});
+                }}
+
+                window.addEventListener('scroll', schedulePositionUpdate, {{ passive: true }});
+                window.addEventListener('resize', function() {{
+                    measureHeaderOffset();
+                    schedulePositionUpdate();
+                }}, {{ passive: true }});
+
+                // Description toggle button
+                const descToggleButton = document.getElementById('descriptionToggle');
+                if (!isDescriptionTruncated) {{
+                    descToggleButton.classList.add('full');
+                    descToggleButton.textContent = '📄 Full';
+                }}
+                descToggleButton.addEventListener('click', toggleDescriptionTruncation);
 
                 // Render items on load
                 renderItems();
@@ -720,16 +799,21 @@ class HTMLReportGenerator:
         items_data = self._prepare_items_data(items, include_images, image_map)
         items_json = json.dumps(items_data)
 
-        # Extract price range for sliders
+        # Extract price range for sliders.
+        # This must normalise prices exactly the way the page's JavaScript
+        # parsePrice() does -- strip everything that is not a digit, dot or
+        # comma -- otherwise a price like "1 300 €" is skipped here (float()
+        # chokes on the thousands separator) while the browser reads it as
+        # 1300, and the default max would silently filter that item out.
         prices = []
         for item in items_data['items']:
-            price_str = str(item.get('price', '0')).replace('€', '').replace(',', '.').strip()
+            price_str = re.sub(r'[^0-9.,]', '', str(item.get('price', '') or '')).replace(',', '.')
             try:
                 price = float(price_str) if price_str else 0
-                if price > 0:
-                    prices.append(price)
             except (ValueError, AttributeError):
-                pass
+                continue
+            if price > 0:
+                prices.append(price)
 
         min_price = min(prices) if prices else 0
         max_price = max(prices) if prices else 1000
@@ -1239,6 +1323,11 @@ class HTMLReportGenerator:
                 display: flex;
                 flex-direction: column;
                 gap: 8px;
+                /* PERF: skip layout/paint for off-screen items.
+                   'auto' remembers the real size once an item has been rendered,
+                   so the scrollbar stays stable. Ctrl+F still finds the text. */
+                content-visibility: auto;
+                contain-intrinsic-size: auto 260px;
             }
 
             .item:hover {
@@ -1297,15 +1386,28 @@ class HTMLReportGenerator:
                 display: -webkit-box;
                 -webkit-box-orient: vertical;
                 overflow: hidden;
-                transition: -webkit-line-clamp 0.3s ease;
+            }
+
+            /* PERF: truncation is toggled with ONE class on the container instead of
+               touching every .item-description node. */
+            .items-container.desc-truncated .item-description {
+                -webkit-line-clamp: 2;
+                line-clamp: 2;
+            }
+
+            .items-container.desc-full .item-description {
+                -webkit-line-clamp: unset;
+                line-clamp: unset;
             }
 
             .item-description.truncated {
                 -webkit-line-clamp: 2;
+                line-clamp: 2;
             }
 
             .item-description.full {
                 -webkit-line-clamp: unset;
+                line-clamp: unset;
             }
 
             .item-images {
@@ -1760,16 +1862,51 @@ class HTMLReportGenerator:
                     return [item.image_url];
                 }}
 
+                // PERF: pure-string escaping. The old version created a DOM node per
+                // call (~5 per item = thousands of throwaway elements per render).
+                const HTML_ESCAPES = {{ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }};
                 function escapeHtml(text) {{
-                    const div = document.createElement('div');
-                    div.textContent = text;
-                    return div.innerHTML;
+                    if (text === null || text === undefined) return '';
+                    const s = typeof text === 'string' ? text : String(text);
+                    return /[&<>"']/.test(s) ? s.replace(/[&<>"']/g, c => HTML_ESCAPES[c]) : s;
                 }}
 
                 function parsePrice(priceStr) {{
                     if (!priceStr) return 0;
                     const cleaned = String(priceStr).replace(/[^0-9.,]/g, '').replace(',', '.');
                     return parseFloat(cleaned) || 0;
+                }}
+
+                // ===== PERF: per-item derived-value caches =====
+                // Filtering and sorting used to re-lowercase and re-parse the same
+                // strings on every keystroke. Each derived value is computed once
+                // per item and reused for the life of the page.
+                function lcField(item, key) {{
+                    let cache = item.__lc;
+                    if (cache === undefined) {{
+                        cache = item.__lc = Object.create(null);
+                    }}
+                    let value = cache[key];
+                    if (value === undefined) {{
+                        value = cache[key] = String(item[key] === null || item[key] === undefined ? '' : item[key]).toLowerCase();
+                    }}
+                    return value;
+                }}
+
+                function itemPrice(item) {{
+                    let p = item.__price;
+                    if (p === undefined) {{
+                        p = item.__price = parsePrice(item.price);
+                    }}
+                    return p;
+                }}
+
+                function itemCity(item) {{
+                    let c = item.__city;
+                    if (c === undefined) {{
+                        c = item.__city = (item.location || '').split(',')[0].toLowerCase().trim();
+                    }}
+                    return c;
                 }}
 
                 // ===== NEW: CASCADING FILTER FUNCTIONS =====
@@ -1818,7 +1955,8 @@ class HTMLReportGenerator:
                         filterRow.querySelector('.filter-value-input').addEventListener('input', (e) => {{
                             filters[index].value = e.target.value;
                             saveFiltersToStorage();
-                            applyAllFilters();
+                            // PERF: debounced - one re-render per typing burst.
+                            applyAllFiltersDebounced();
                         }});
 
                         filterRow.querySelector('.filter-delete-btn').addEventListener('click', () => {{
@@ -1849,37 +1987,38 @@ class HTMLReportGenerator:
 
                 function getFilteredData() {{
                     // Get base filters
-                    const textSearch = document.getElementById('textSearch')?.value.toLowerCase() || '';
                     const priceFrom = parseFloat(document.getElementById('priceFrom').value) || 0;
                     const priceTo = parseFloat(document.getElementById('priceTo').value) || Infinity;
                     const locationFilter = document.getElementById('locationFilter')?.value.toLowerCase() || '';
 
-                    // Start with all items
-                    let results = allData.items.slice();
-
-                    // Apply cascading keyword filters
+                    // PERF: normalise the active filters once, not once per item.
+                    const activeFilters = [];
                     for (let i = 0; i < filters.length; i++) {{
-                        const filter = filters[i];
-                        if (!filter.value.trim()) continue; // Skip empty filters
-
-                        results = results.filter(item => {{
-                            const fieldValue = String(item[filter.key] || '').toLowerCase();
-                            return fieldValue.includes(filter.value.toLowerCase());
-                        }});
+                        const needle = (filters[i].value || '').trim().toLowerCase();
+                        if (needle) activeFilters.push({{ key: filters[i].key, needle: needle }});
                     }}
 
-                    // Apply price filter
-                    results = results.filter(item => {{
-                        const price = parsePrice(item.price);
-                        return price >= priceFrom && price <= priceTo;
-                    }});
+                    const source = allData.items;
+                    const results = [];
 
-                    // Apply location filter
-                    if (locationFilter) {{
-                        results = results.filter(item => {{
-                            const itemLocation = (item.location || '').split(',')[0].toLowerCase().trim();
-                            return itemLocation.includes(locationFilter);
-                        }});
+                    // PERF: one pass over the data instead of a fresh intermediate
+                    // array per filter, using cached lowercase/parsed fields.
+                    outer:
+                    for (let i = 0; i < source.length; i++) {{
+                        const item = source[i];
+
+                        for (let f = 0; f < activeFilters.length; f++) {{
+                            if (lcField(item, activeFilters[f].key).indexOf(activeFilters[f].needle) === -1) {{
+                                continue outer;
+                            }}
+                        }}
+
+                        const price = itemPrice(item);
+                        if (price < priceFrom || price > priceTo) continue;
+
+                        if (locationFilter && itemCity(item).indexOf(locationFilter) === -1) continue;
+
+                        results.push(item);
                     }}
 
                     return results;
@@ -1929,20 +2068,19 @@ class HTMLReportGenerator:
                     }}
                 }}
 
+                // PERF: flipping one class on the container beats walking every
+                // .item-description node (see the .items-container.desc-* CSS rules).
+                function applyTruncationClass() {{
+                    const container = document.getElementById('items');
+                    container.classList.toggle('desc-truncated', isDescriptionTruncated);
+                    container.classList.toggle('desc-full', !isDescriptionTruncated);
+                }}
+
                 function toggleDescriptionTruncation() {{
                     isDescriptionTruncated = !isDescriptionTruncated;
-                    const descriptions = document.querySelectorAll('.item-description');
                     const button = document.getElementById('descriptionToggle');
 
-                    descriptions.forEach(desc => {{
-                        if (isDescriptionTruncated) {{
-                            desc.classList.remove('full');
-                            desc.classList.add('truncated');
-                        }} else {{
-                            desc.classList.remove('truncated');
-                            desc.classList.add('full');
-                        }}
-                    }});
+                    applyTruncationClass();
 
                     if (isDescriptionTruncated) {{
                         button.classList.remove('full');
@@ -1959,15 +2097,23 @@ class HTMLReportGenerator:
                     }}
                 }}
 
+                // PERF: comparators read cached values (itemPrice / itemCity) instead
+                // of re-parsing strings on every one of the n*log(n) comparisons, and
+                // location sorting uses a reusable Intl.Collator rather than
+                // localeCompare, which builds a collator per call.
+                const LOCATION_COLLATOR = typeof Intl !== 'undefined' && Intl.Collator
+                    ? new Intl.Collator(undefined, {{ sensitivity: 'base' }})
+                    : {{ compare: (a, b) => (a < b ? -1 : a > b ? 1 : 0) }};
+
                 function applySorting(data) {{
                     if (currentSort === 'priceAsc') {{
-                        data.sort((a, b) => parsePrice(a.price) - parsePrice(b.price));
+                        data.sort((a, b) => itemPrice(a) - itemPrice(b));
                     }} else if (currentSort === 'priceDesc') {{
-                        data.sort((a, b) => parsePrice(b.price) - parsePrice(a.price));
+                        data.sort((a, b) => itemPrice(b) - itemPrice(a));
                     }} else if (currentSort === 'locationAsc') {{
-                        data.sort((a, b) => (a.location || '').split(',')[0].toLowerCase().trim().localeCompare((b.location || '').split(',')[0].toLowerCase().trim()));
+                        data.sort((a, b) => LOCATION_COLLATOR.compare(itemCity(a), itemCity(b)));
                     }} else if (currentSort === 'locationDesc') {{
-                        data.sort((a, b) => (b.location || '').split(',')[0].toLowerCase().trim().localeCompare((a.location || '').split(',')[0].toLowerCase().trim()));
+                        data.sort((a, b) => LOCATION_COLLATOR.compare(itemCity(b), itemCity(a)));
                     }}
                     return data;
                 }}
@@ -1979,23 +2125,92 @@ class HTMLReportGenerator:
                     updateCounter();
                 }}
 
+                // PERF: typing in a text/price box fired a full re-filter + full
+                // re-render on every keystroke. Coalesce bursts into one render.
+                let filterDebounceTimer = null;
+                function applyAllFiltersDebounced() {{
+                    if (filterDebounceTimer) clearTimeout(filterDebounceTimer);
+                    filterDebounceTimer = setTimeout(function() {{
+                        filterDebounceTimer = null;
+                        applyAllFilters();
+                    }}, 150);
+                }}
+
                 function updateCounter() {{
                     document.getElementById('totalItems').textContent = filteredData.length;
                 }}
 
+                // ===== PERF: scroll position counter =====
+                // Old version read getBoundingClientRect() for EVERY item on EVERY
+                // scroll event (1300+ forced layout reads per event). Now it is
+                // rAF-throttled and binary-searches the cached item list, touching
+                // ~log2(n) ≈ 11 elements per frame.
+                let itemNodes = [];
+                let positionTickScheduled = false;
+                let headerOffset = 0;
+
+                function measureHeaderOffset() {{
+                    const header = document.querySelector('.header');
+                    headerOffset = (header ? header.offsetHeight : 0) + 60;
+                }}
+
                 function updatePositionCounter() {{
-                    const items = document.querySelectorAll('.item');
-                    const headerHeight = document.querySelector('.header').offsetHeight + 50;
-                    let currentItemIndex = 1;
+                    const counter = document.getElementById('currentCount');
+                    if (!counter) return;
+                    const n = itemNodes.length;
+                    if (n === 0) {{
+                        counter.textContent = '0';
+                        return;
+                    }}
 
-                    items.forEach((item, index) => {{
-                        const rect = item.getBoundingClientRect();
-                        if (rect.top < headerHeight + 10) {{
-                            currentItemIndex = index + 1;
+                    let lo = 0, hi = n - 1, found = 0;
+                    while (lo <= hi) {{
+                        const mid = (lo + hi) >> 1;
+                        if (itemNodes[mid].getBoundingClientRect().top < headerOffset) {{
+                            found = mid;
+                            lo = mid + 1;
+                        }} else {{
+                            hi = mid - 1;
                         }}
-                    }});
+                    }}
 
-                    document.getElementById('currentCount').textContent = currentItemIndex;
+                    counter.textContent = found + 1;
+                }}
+
+                function schedulePositionUpdate() {{
+                    if (positionTickScheduled) return;
+                    positionTickScheduled = true;
+                    requestAnimationFrame(function() {{
+                        positionTickScheduled = false;
+                        updatePositionCounter();
+                    }});
+                }}
+
+                function buildItemHTML(item) {{
+                    const images = getImages(item);
+                    const description = (item.full_description || item.description || '').replace(/\\r\\n/g, ' ').replace(/\\s+/g, ' ').trim();
+
+                    let thumbnailsHTML = '';
+                    for (let i = 0; i < images.length; i++) {{
+                        const imgSrc = images[i];
+                        if (imgSrc) {{
+                            // PERF: lazy + async decode keeps the browser from firing
+                            // thousands of image requests at once; the click is handled
+                            // by one delegated listener instead of an inline handler.
+                            thumbnailsHTML += '<img src="' + escapeHtml(imgSrc) + '" class="item-thumbnail" loading="lazy" decoding="async" alt="Image" title="Click to expand">';
+                        }}
+                    }}
+
+                    return '<div class="item">'
+                        + '<div class="item-header">'
+                        + '<h3 class="item-title"><a href="' + escapeHtml(item.item_url) + '" target="_blank" rel="noopener">' + escapeHtml(item.title) + '</a></h3>'
+                        + '<span class="meta-price">' + escapeHtml(item.price) + '</span>'
+                        + '<span class="meta-location">📍 ' + escapeHtml(item.location) + '</span>'
+                        + '<span class="meta-date">📅 ' + escapeHtml(item.date_posted) + '</span>'
+                        + '</div>'
+                        + '<p class="item-description">' + escapeHtml(description) + '</p>'
+                        + '<div class="item-images">' + thumbnailsHTML + '</div>'
+                        + '</div>';
                 }}
 
                 function renderItems() {{
@@ -2003,9 +2218,9 @@ class HTMLReportGenerator:
                     const noResults = document.getElementById('noResults');
                     const summary = document.getElementById('summary');
 
-                    container.innerHTML = '';
-
                     if (filteredData.length === 0) {{
+                        container.textContent = '';
+                        itemNodes = [];
                         noResults.style.display = 'block';
                         document.getElementById('currentCount').textContent = '0';
                         return;
@@ -2014,38 +2229,20 @@ class HTMLReportGenerator:
                     noResults.style.display = 'none';
                     summary.textContent = allData.total_items + ' items total • ' + allData.timestamp;
 
-                    filteredData.forEach((item, index) => {{
-                        const images = getImages(item);
-                        const description = (item.full_description || item.description || '').replace(/\\r\\n/g, ' ').replace(/\\s+/g, ' ').trim();
+                    // PERF: build the whole list as one string and parse it ONCE.
+                    // The old `container.innerHTML += itemHTML` inside the loop
+                    // re-parsed and re-laid-out the entire list on every iteration
+                    // (O(n^2)); at 1300+ items that is minutes of work.
+                    const parts = new Array(filteredData.length);
+                    for (let i = 0; i < filteredData.length; i++) {{
+                        parts[i] = buildItemHTML(filteredData[i]);
+                    }}
+                    container.innerHTML = parts.join('');
+                    itemNodes = Array.prototype.slice.call(container.children);
 
-                        let thumbnailsHTML = '';
-                        images.forEach(imgSrc => {{
-                            if (imgSrc) {{
-                                thumbnailsHTML += `<img src="${{imgSrc}}" class="item-thumbnail" onclick="openImage(this.src)" alt="Image" title="Click to expand">`;
-                            }}
-                        }});
-
-                        const itemHTML = `
-                            <div class="item">
-                                <div class="item-header">
-                                    <h3 class="item-title">
-                                        <a href="${{item.item_url}}" target="_blank">${{escapeHtml(item.title)}}</a>
-                                    </h3>
-                                    <span class="meta-price">${{escapeHtml(item.price)}}</span>
-                                    <span class="meta-location">📍 ${{escapeHtml(item.location)}}</span>
-                                    <span class="meta-date">📅 ${{escapeHtml(item.date_posted)}}</span>
-                                </div>
-                                <p class="item-description ${{isDescriptionTruncated ? 'truncated' : 'full'}}">${{escapeHtml(description)}}</p>
-                                <div class="item-images">
-                                    ${{thumbnailsHTML}}
-                                </div>
-                            </div>
-                        `;
-
-                        container.innerHTML += itemHTML;
-                    }});
-
-                    updatePositionCounter();
+                    applyTruncationClass();
+                    measureHeaderOffset();
+                    schedulePositionUpdate();
                 }}
 
                 function clearAllFilters() {{
@@ -2069,8 +2266,9 @@ class HTMLReportGenerator:
                 }}
 
                 // ===== EVENT LISTENERS =====
-                document.getElementById('priceFrom').addEventListener('input', applyAllFilters);
-                document.getElementById('priceTo').addEventListener('input', applyAllFilters);
+                // PERF: debounced so a burst of keystrokes causes one re-render.
+                document.getElementById('priceFrom').addEventListener('input', applyAllFiltersDebounced);
+                document.getElementById('priceTo').addEventListener('input', applyAllFiltersDebounced);
                 document.getElementById('locationFilter').addEventListener('change', applyAllFilters);
                 document.getElementById('clearFilters').addEventListener('click', clearAllFilters);
 
@@ -2095,8 +2293,20 @@ class HTMLReportGenerator:
                     }}
                 }});
 
-                window.addEventListener('scroll', function() {{
-                    updatePositionCounter();
+                // PERF: passive + rAF-throttled, and only ~log2(n) rect reads per frame.
+                window.addEventListener('scroll', schedulePositionUpdate, {{ passive: true }});
+                window.addEventListener('resize', function() {{
+                    measureHeaderOffset();
+                    schedulePositionUpdate();
+                }}, {{ passive: true }});
+
+                // PERF: one delegated listener for every thumbnail in the list,
+                // instead of an inline onclick compiled per image.
+                document.getElementById('items').addEventListener('click', function(e) {{
+                    const target = e.target;
+                    if (target && target.classList && target.classList.contains('item-thumbnail')) {{
+                        openImage(target.src, target);
+                    }}
                 }});
 
                 const sizeSlider = document.getElementById('sizeSlider');
@@ -2113,10 +2323,12 @@ class HTMLReportGenerator:
                 document.getElementById('clearAllFiltersBtn').addEventListener('click', clearAllFilters);
 
                 // Initialize
+                applyTruncationClass();
                 loadFiltersFromStorage();
                 renderFilterRows();
-                renderItems();
-                updateCounter();
+                // PERF + correctness: apply any stored filters before the first render
+                // instead of rendering all items and immediately re-rendering.
+                applyAllFilters();
             </script>
         </body>
         </html>
