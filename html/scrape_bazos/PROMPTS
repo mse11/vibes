@@ -75,5 +75,5 @@ scrape-bazos.exe search \
 ###################################################
 scrape-bazos.exe search \
     --category deti --sub-category 'autosedacky' \
-    --keyword '' \
+    --keyword 'joie' \
     --details-all

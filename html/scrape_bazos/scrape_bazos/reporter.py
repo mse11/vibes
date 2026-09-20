@@ -901,6 +901,11 @@ class HTMLReportGenerator:
                 color: #fff;
             }
 
+            .item-counter .counter-total {
+                opacity: 0.7;
+                font-weight: 400;
+            }
+
             /* ===== NEW: Cascading Filters Styles ===== */
             .filters-management-section {
                 background: rgba(0,0,0,0.2);
@@ -1020,6 +1025,33 @@ class HTMLReportGenerator:
                 display: flex;
                 gap: 8px;
                 flex-wrap: wrap;
+                align-items: center;
+            }
+
+            /* Diacritics matching mode selector (Ignore diacritics / Exact) */
+            .match-mode {
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                margin-left: auto;
+                font-size: 0.8em;
+                color: rgba(255,255,255,0.75);
+                white-space: nowrap;
+            }
+
+            .match-mode-select {
+                padding: 5px 8px;
+                background: rgba(255,255,255,0.1);
+                color: white;
+                border: 1px solid rgba(255,255,255,0.3);
+                border-radius: 3px;
+                cursor: pointer;
+                font-size: 1em;
+            }
+
+            .match-mode-select option {
+                background: #2c3e50;
+                color: white;
             }
 
             .add-filter-btn {
@@ -1744,8 +1776,8 @@ class HTMLReportGenerator:
                                 <span class="thumb-size-display" id="sizeDisplay">150px</span>
                             </div>
 
-                            <div class="item-counter">
-                                <strong id="currentCount">0</strong> / <strong id="totalItems">0</strong>
+                            <div class="item-counter" title="item you are looking at / items matching the filters (of all scraped items)">
+                                <strong id="currentCount">0</strong> / <strong id="totalItems">0</strong><span id="totalAllItems" class="counter-total"></span>
                             </div>
                         </div>
 
@@ -1760,6 +1792,13 @@ class HTMLReportGenerator:
                             <div class="filters-actions">
                                 <button id="addFilterBtn" class="add-filter-btn">+ Add Filter</button>
                                 <button id="clearAllFiltersBtn" class="clear-all-filters-btn">Clear All Filters</button>
+                                <label class="match-mode" for="matchMode" title="Diacritics-insensitive: 'otocna' also matches 'otočná' (like the bazos.sk search box). Exact: match the letters exactly as typed.">
+                                    Matching:
+                                    <select id="matchMode" class="match-mode-select">
+                                        <option value="fold" selected>Ignore diacritics (č = c)</option>
+                                        <option value="exact">Exact</option>
+                                    </select>
+                                </label>
                             </div>
                         </div>
                     </div>
@@ -1789,9 +1828,25 @@ class HTMLReportGenerator:
 
                 // NEW: Cascading Filters State
                 let filters = [
-                    {{ key: 'title', value: '' }}  // Default filter
+                    {{ key: 'any', value: '' }}  // Default filter: search every field
                 ];
-                const AVAILABLE_KEYS = ['title', 'description', 'full_description', 'price', 'location'];
+                // 'any' is a virtual key: it searches all of SEARCH_ALL_KEYS at once,
+                // which is what the bazos.sk search box does.
+                const AVAILABLE_KEYS = ['any', 'title', 'description', 'full_description', 'price', 'location'];
+                const SEARCH_ALL_KEYS = ['title', 'description', 'full_description', 'price', 'location'];
+                const KEY_LABELS = {{ any: 'any (all fields)' }};
+                const DEFAULT_FILTER_KEY = 'any';
+
+                // NEW: keyword matching mode.
+                // true  -> diacritics-insensitive (default): 'otocna' matches 'otočná',
+                //          'otočná' matches 'otocna'. This is how bazos.sk itself searches.
+                // false -> exact: the letters must match as typed.
+                let ignoreDiacritics = true;
+
+                // Strip combining marks so č->c, š->s, á->a, ľ->l, ô->o, ...
+                function foldDiacritics(text) {{
+                    return text.normalize('NFD').replace(/[\\u0300-\\u036f]/g, '');
+                }}
 
                 // ===== IMAGE MODAL FUNCTIONS =====
                 function openImage(src) {{
@@ -1883,14 +1938,32 @@ class HTMLReportGenerator:
                 // Filtering and sorting used to re-lowercase and re-parse the same
                 // strings on every keystroke. Each derived value is computed once
                 // per item and reused for the life of the page.
-                function lcField(item, key) {{
-                    let cache = item.__lc;
+                // `folded` picks the diacritics-stripped variant; both variants are
+                // cached separately so switching the matching mode costs nothing.
+                function lcField(item, key, folded) {{
+                    const cacheKey = folded ? '__fd' : '__lc';
+                    let cache = item[cacheKey];
                     if (cache === undefined) {{
-                        cache = item.__lc = Object.create(null);
+                        cache = item[cacheKey] = Object.create(null);
                     }}
                     let value = cache[key];
                     if (value === undefined) {{
-                        value = cache[key] = String(item[key] === null || item[key] === undefined ? '' : item[key]).toLowerCase();
+                        let raw;
+                        if (key === 'any') {{
+                            // Virtual key: every field joined with a newline so a needle
+                            // can never match across a field boundary.
+                            const parts = [];
+                            for (let k = 0; k < SEARCH_ALL_KEYS.length; k++) {{
+                                const v = item[SEARCH_ALL_KEYS[k]];
+                                if (v !== null && v !== undefined) parts.push(String(v));
+                            }}
+                            raw = parts.join('\\n');
+                        }} else {{
+                            raw = String(item[key] === null || item[key] === undefined ? '' : item[key]);
+                        }}
+                        value = raw.toLowerCase();
+                        if (folded) value = foldDiacritics(value);
+                        cache[key] = value;
                     }}
                     return value;
                 }}
@@ -1903,7 +1976,14 @@ class HTMLReportGenerator:
                     return p;
                 }}
 
-                function itemCity(item) {{
+                function itemCity(item, folded) {{
+                    if (folded) {{
+                        let cf = item.__cityFd;
+                        if (cf === undefined) {{
+                            cf = item.__cityFd = foldDiacritics(itemCity(item, false));
+                        }}
+                        return cf;
+                    }}
                     let c = item.__city;
                     if (c === undefined) {{
                         c = item.__city = (item.location || '').split(',')[0].toLowerCase().trim();
@@ -1915,6 +1995,7 @@ class HTMLReportGenerator:
                 function saveFiltersToStorage() {{
                     try {{
                         localStorage.setItem('cascadingFilters', JSON.stringify(filters));
+                        localStorage.setItem('filterMatchMode', ignoreDiacritics ? 'fold' : 'exact');
                     }} catch(e) {{
                         // localStorage not available
                     }}
@@ -1926,10 +2007,16 @@ class HTMLReportGenerator:
                         if (stored) {{
                             filters = JSON.parse(stored);
                         }}
+                        const mode = localStorage.getItem('filterMatchMode');
+                        if (mode) {{
+                            ignoreDiacritics = mode !== 'exact';
+                        }}
                     }} catch(e) {{
                         // localStorage not available
-                        filters = [{{ key: 'title', value: '' }}];
+                        filters = [{{ key: DEFAULT_FILTER_KEY, value: '' }}];
                     }}
+                    const modeSelect = document.getElementById('matchMode');
+                    if (modeSelect) modeSelect.value = ignoreDiacritics ? 'fold' : 'exact';
                 }}
 
                 function renderFilterRows() {{
@@ -1942,7 +2029,7 @@ class HTMLReportGenerator:
                         filterRow.innerHTML = `
                             <div class="filter-row-number">F${{index + 1}}</div>
                             <select class="filter-key-select" data-index="${{index}}">
-                                ${{AVAILABLE_KEYS.map(key => `<option value="${{key}}" ${{filter.key === key ? 'selected' : ''}}>${{key}}</option>`).join('')}}
+                                ${{AVAILABLE_KEYS.map(key => `<option value="${{key}}" ${{filter.key === key ? 'selected' : ''}}>${{KEY_LABELS[key] || key}}</option>`).join('')}}
                             </select>
                             <input type="text" class="filter-value-input" data-index="${{index}}" placeholder="Keyword..." value="${{escapeHtml(filter.value)}}">
                             <button class="filter-delete-btn" data-index="${{index}}" title="Delete this filter">✕ Delete</button>
@@ -1970,7 +2057,7 @@ class HTMLReportGenerator:
                 }}
 
                 function addFilter() {{
-                    filters.push({{ key: 'title', value: '' }});
+                    filters.push({{ key: DEFAULT_FILTER_KEY, value: '' }});
                     saveFiltersToStorage();
                     renderFilterRows();
                     applyAllFilters();
@@ -1980,7 +2067,7 @@ class HTMLReportGenerator:
                     filters.splice(index, 1);
                     // Always keep at least one filter
                     if (filters.length === 0) {{
-                        filters.push({{ key: 'title', value: '' }});
+                        filters.push({{ key: DEFAULT_FILTER_KEY, value: '' }});
                     }}
                     saveFiltersToStorage();
                     renderFilterRows();
@@ -1991,12 +2078,15 @@ class HTMLReportGenerator:
                     // Get base filters
                     const priceFrom = parseFloat(document.getElementById('priceFrom').value) || 0;
                     const priceTo = parseFloat(document.getElementById('priceTo').value) || Infinity;
-                    const locationFilter = document.getElementById('locationFilter')?.value.toLowerCase() || '';
+                    const fold = ignoreDiacritics;
+                    let locationFilter = document.getElementById('locationFilter')?.value.toLowerCase() || '';
+                    if (fold && locationFilter) locationFilter = foldDiacritics(locationFilter);
 
                     // PERF: normalise the active filters once, not once per item.
                     const activeFilters = [];
                     for (let i = 0; i < filters.length; i++) {{
-                        const needle = (filters[i].value || '').trim().toLowerCase();
+                        let needle = (filters[i].value || '').trim().toLowerCase();
+                        if (fold && needle) needle = foldDiacritics(needle);
                         if (needle) activeFilters.push({{ key: filters[i].key, needle: needle }});
                     }}
 
@@ -2010,7 +2100,7 @@ class HTMLReportGenerator:
                         const item = source[i];
 
                         for (let f = 0; f < activeFilters.length; f++) {{
-                            if (lcField(item, activeFilters[f].key).indexOf(activeFilters[f].needle) === -1) {{
+                            if (lcField(item, activeFilters[f].key, fold).indexOf(activeFilters[f].needle) === -1) {{
                                 continue outer;
                             }}
                         }}
@@ -2018,7 +2108,7 @@ class HTMLReportGenerator:
                         const price = itemPrice(item);
                         if (price < priceFrom || price > priceTo) continue;
 
-                        if (locationFilter && itemCity(item).indexOf(locationFilter) === -1) continue;
+                        if (locationFilter && itemCity(item, fold).indexOf(locationFilter) === -1) continue;
 
                         results.push(item);
                     }}
@@ -2139,7 +2229,15 @@ class HTMLReportGenerator:
                 }}
 
                 function updateCounter() {{
+                    // currentCount = the item you are scrolled to, totalItems = how many
+                    // items match the filters. When a filter is active, also spell out
+                    // the full dataset size so "1 / 20" is not mistaken for "no filtering".
                     document.getElementById('totalItems').textContent = filteredData.length;
+                    const totalAll = document.getElementById('totalAllItems');
+                    if (totalAll) {{
+                        const all = allData.items.length;
+                        totalAll.textContent = filteredData.length === all ? '' : ' of ' + all;
+                    }}
                 }}
 
                 // ===== PERF: scroll position counter =====
@@ -2259,7 +2357,7 @@ class HTMLReportGenerator:
                     updateSortButtons();
 
                     // Reset cascading filters
-                    filters = [{{ key: 'title', value: '' }}];
+                    filters = [{{ key: DEFAULT_FILTER_KEY, value: '' }}];
                     saveFiltersToStorage();
                     renderFilterRows();
 
@@ -2323,6 +2421,11 @@ class HTMLReportGenerator:
                 // NEW: Cascading Filter Event Listeners
                 document.getElementById('addFilterBtn').addEventListener('click', addFilter);
                 document.getElementById('clearAllFiltersBtn').addEventListener('click', clearAllFilters);
+                document.getElementById('matchMode').addEventListener('change', (e) => {{
+                    ignoreDiacritics = e.target.value !== 'exact';
+                    saveFiltersToStorage();
+                    applyAllFilters();
+                }});
 
                 // Initialize
                 applyTruncationClass();

@@ -130,3 +130,85 @@ class TestHTMLReportGenerator:
 
         html = generator._get_image_html(item, include_images=False, image_map=None)
         assert "No image display mode" in html
+
+
+class TestDynamicReportMatching:
+    """Test the diacritics-insensitive keyword matching in the dynamic report"""
+
+    @staticmethod
+    def _sample_items():
+        return [
+            BazosItem(
+                title="Otočná autosedačka 360",
+                price="120 €",
+                location="Košice",
+                description="Otočná sedačka isofix",
+                image_url=None,
+                item_url="https://bazos.sk/item/1",
+            ),
+            BazosItem(
+                title="Otocna autosedacka",
+                price="90 €",
+                location="Kosice",
+                description="otocna sedacka",
+                image_url=None,
+                item_url="https://bazos.sk/item/2",
+            ),
+        ]
+
+    def test_dynamic_report_has_diacritics_folding(self, tmp_path):
+        """Filter matching must strip combining marks so 'otocna' finds 'otočná'"""
+        generator = HTMLReportGenerator()
+        output = tmp_path / "report.html"
+
+        generator.generate_dynamic_report(
+            self._sample_items(), output_file=str(output), category="deti", keyword=""
+        )
+        html = output.read_text(encoding="utf-8")
+
+        # The folding helper and the exact regex for combining marks
+        assert "function foldDiacritics(text)" in html
+        assert "text.normalize('NFD').replace(/[\\u0300-\\u036f]/g, '')" in html
+        # Both the needle and the cached field are folded
+        assert "needle = foldDiacritics(needle)" in html
+        assert "lcField(item, activeFilters[f].key, fold)" in html
+
+    def test_dynamic_report_has_match_mode_selector(self, tmp_path):
+        """The report exposes an 'ignore diacritics' (default) / 'exact' switch"""
+        generator = HTMLReportGenerator()
+        output = tmp_path / "report.html"
+
+        generator.generate_dynamic_report(
+            self._sample_items(), output_file=str(output), category="deti", keyword=""
+        )
+        html = output.read_text(encoding="utf-8")
+
+        assert 'id="matchMode"' in html
+        assert '<option value="fold" selected>' in html
+        assert '<option value="exact">' in html
+        # Diacritics-insensitive is the default state
+        assert "let ignoreDiacritics = true;" in html
+
+    def test_dynamic_report_has_any_field_key(self, tmp_path):
+        """'any' searches every field and is the default filter key"""
+        generator = HTMLReportGenerator()
+        output = tmp_path / "report.html"
+
+        generator.generate_dynamic_report(
+            self._sample_items(), output_file=str(output), category="deti", keyword=""
+        )
+        html = output.read_text(encoding="utf-8")
+
+        assert (
+            "const AVAILABLE_KEYS = ['any', 'title', 'description', "
+            "'full_description', 'price', 'location'];" in html
+        )
+        assert (
+            "const SEARCH_ALL_KEYS = ['title', 'description', "
+            "'full_description', 'price', 'location'];" in html
+        )
+        assert "const DEFAULT_FILTER_KEY = 'any';" in html
+        # The virtual key joins the fields so a needle cannot span a boundary
+        assert "raw = parts.join('\\n');" in html
+        # The very first filter row uses it
+        assert "{ key: 'any', value: '' }" in html
