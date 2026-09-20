@@ -174,9 +174,9 @@ def cli():
     help=(
         "Also dump a matching LLM analysis prompt (see 'prompt') as a "
         ".md file alongside the results, e.g. generated/<output-name>.md. "
-        "Must name an existing preset (pc, notebook, pamat, sodimm, udimm, "
-        "rdimm, hdd-ssd); 'custom' has no fixed preset content and is "
-        "skipped with a warning."
+        "Must name an existing preset (pc, notebook, pamat, pamat-sodimm, "
+        "pamat-udimm, pamat-rdimm, disk, disk-hdd, disk-ssd); 'custom' has "
+        "no fixed preset content and is skipped with a warning."
     ),
 )
 def search(category, keyword, price_from, price_to, location, radius, sub_category, pages_get, output, format, timeout, max_retries, retry_delay, display, pages_count, details_all, no_images, download_images, images_dir, truncate_descriptions, prompt_template):
@@ -933,7 +933,7 @@ def categories_prompt(details):
     for prompt_type in PromptType:
         config = get_preset(prompt_type)
         click.echo(
-            f"  {click.style(prompt_type.value.ljust(10), fg='cyan')} → {config.product_name}"
+            f"  {click.style(prompt_type.value.ljust(14), fg='cyan')} → {config.product_name}"
         )
 
         if details:
@@ -970,11 +970,12 @@ def categories_prompt(details):
     help=(
         "Prompt/product type (default: custom). Each type's table columns "
         "are fixed in code: pc/notebook use CPU Specs + RAM & Storage + "
-        "Proxmox & Jellyfin Fit, pamat (any RAM) / sodimm (notebook "
-        "SO-DIMM only) / rdimm (server RDIMM, always ECC) use RAM Specs + "
-        "Capacity & Configuration + Compatibility & Ideal Use Case, udimm "
-        "(desktop UDIMM, ECC or non-ECC) additionally calls out ECC status "
-        "in its RAM Specs column, hdd-ssd uses Disk Specs + Capacity & "
+        "Proxmox & Jellyfin Fit, pamat (any RAM) / pamat-sodimm (notebook "
+        "SO-DIMM only) / pamat-rdimm (server RDIMM, always ECC) use RAM "
+        "Specs + Capacity & Configuration + Compatibility & Ideal Use Case, "
+        "pamat-udimm (desktop UDIMM, ECC or non-ECC) additionally calls out "
+        "ECC status in its RAM Specs column, disk (any drive) / disk-hdd "
+        "(HDDs only) / disk-ssd (SSDs only) use Disk Specs + Capacity & "
         "Form Factor + Compatibility & Ideal Use Case, and custom uses the "
         "generic Key Specifications + Capacity & Configuration + "
         "Compatibility & Ideal Use Case. Column headers are not "
@@ -1086,7 +1087,11 @@ def prompt(
             --include "standalone desktop graphics cards"
 
         # Print instead of/as well as saving, and also append to PROMPTS
-        scrape-bazos prompt --type hdd-ssd --print --append-to-prompts PROMPTS
+        scrape-bazos prompt --type disk --print --append-to-prompts PROMPTS
+
+        # SSD-only or HDD-only variants
+        scrape-bazos prompt --type disk-ssd
+        scrape-bazos prompt --type disk-hdd
     """
     try:
         prompt_type = PromptType(prompt_type)

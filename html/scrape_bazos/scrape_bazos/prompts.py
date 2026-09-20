@@ -35,10 +35,12 @@ class PromptType(str, Enum):
     PC = "pc"
     NOTEBOOK = "notebook"
     RAM = "pamat"
-    RAM_SODIMM = "sodimm"
-    RAM_UDIMM = "udimm"
-    RAM_RDIMM = "rdimm"
-    HDD_SSD = "hdd-ssd"
+    RAM_SODIMM = "pamat-sodimm"
+    RAM_UDIMM = "pamat-udimm"
+    RAM_RDIMM = "pamat-rdimm"
+    DISK = "disk"
+    DISK_HDD = "disk-hdd"
+    DISK_SSD = "disk-ssd"
     CUSTOM = "custom"
 
 
@@ -200,8 +202,8 @@ PRESETS: Dict[PromptType, PromptConfig] = {
             "RAM kits (always registered ECC)"
         ),
     ),
-    PromptType.HDD_SSD: PromptConfig(
-        product_name="HDDs and SSDs",
+    PromptType.DISK: PromptConfig(
+        product_name="storage drives (HDDs and SSDs)",
         price_tiers=[100, 200, 400],
         col3_header="Disk Specs (Type, Interface & Speed)",
         col4_header="Capacity & Form Factor",
@@ -218,6 +220,46 @@ PRESETS: Dict[PromptType, PromptConfig] = {
             "memory cards"
         ),
         include_text="individual internal or external HDDs and SSDs",
+    ),
+    PromptType.DISK_HDD: PromptConfig(
+        product_name="HDDs (traditional spinning hard disk drives)",
+        price_tiers=[100, 200, 400],
+        col3_header="Disk Specs (Type, Interface & Speed)",
+        col4_header="Capacity & Form Factor",
+        col6_header="Compatibility & Ideal Use Case",
+        col3_note=(
+            "Explicitly note the interface, RPM, and form factor in the "
+            '**Disk Specs** column (e.g., *7200 RPM SATA III 3.5" HDD* or '
+            '*5400 RPM SATA III 2.5" HDD*). Only HDDs (spinning platters) '
+            "belong here -- never an SSD."
+        ),
+        example_item="Seagate BarraCuda 4TB",
+        exclude_text=(
+            "complete PCs, laptops/notebooks, external drive enclosures "
+            "without pre-installed disks, USB flash drives, SD/MicroSD "
+            "memory cards, or any SSD (SATA, NVMe, or M.2)"
+        ),
+        include_text="individual internal or external HDDs (spinning hard disk drives)",
+    ),
+    PromptType.DISK_SSD: PromptConfig(
+        product_name="SSDs (solid-state drives)",
+        price_tiers=[100, 200, 400],
+        col3_header="Disk Specs (Type, Interface & Speed)",
+        col4_header="Capacity & Form Factor",
+        col6_header="Compatibility & Ideal Use Case",
+        col3_note=(
+            "Explicitly note the drive type, interface, and speed in the "
+            "**Disk Specs** column (e.g., *NVMe PCIe 4.0 SSD (Up to 7,450 "
+            'MB/s)* or *SATA III 6Gb/s 2.5" SSD*). Only SSDs (flash-based) '
+            "belong here -- never an HDD."
+        ),
+        example_item="Samsung 990 PRO 1TB",
+        exclude_text=(
+            "complete PCs, laptops/notebooks, external drive enclosures "
+            "without pre-installed disks, USB flash drives, SD/MicroSD "
+            "memory cards, or any HDD (spinning hard disk drive)"
+        ),
+        include_text="individual internal or external SSDs (SATA, NVMe, or M.2)",
     ),
 }
 

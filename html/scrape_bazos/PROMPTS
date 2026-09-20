@@ -51,11 +51,12 @@ scrape-bazos.exe search \
     --details-all
 
 ###################################################
-# QUERY - PC MEMORY
+# QUERY - PC MEMORY UDIMM
 ###################################################
 scrape-bazos.exe search \
     --category pc --sub-category 'pamet' \
     --keyword 'DDR4' \
+     --prompt-template pamat-udimm \
     --details-all
 
 ###################################################
@@ -64,4 +65,5 @@ scrape-bazos.exe search \
 scrape-bazos.exe search \
     --category pc --sub-category 'hdd' \
     --keyword '' \
+    --prompt-template 'disk' \
     --details-all

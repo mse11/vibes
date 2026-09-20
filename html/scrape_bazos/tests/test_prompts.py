@@ -58,13 +58,13 @@ class TestPromptType:
     def test_each_type_has_its_own_columns(self):
         pc_cols = get_preset(PromptType.PC)
         ram_cols = get_preset(PromptType.RAM)
-        hdd_cols = get_preset(PromptType.HDD_SSD)
+        disk_cols = get_preset(PromptType.DISK)
         custom_cols = get_preset(PromptType.CUSTOM)
 
         assert pc_cols.col3_header == "CPU Specs"
         assert pc_cols.col6_header == "Proxmox & Jellyfin Fit"
         assert ram_cols.col3_header == "RAM Specs (Type & Speed)"
-        assert hdd_cols.col3_header == "Disk Specs (Type, Interface & Speed)"
+        assert disk_cols.col3_header == "Disk Specs (Type, Interface & Speed)"
         assert custom_cols.col3_header == "Key Specifications"
         assert custom_cols.col6_header == "Compatibility & Ideal Use Case"
 
@@ -105,6 +105,31 @@ class TestPromptType:
         ):
             config = get_preset(prompt_type)
             assert config.col4_header == "Capacity & Configuration"
+            assert config.col6_header == "Compatibility & Ideal Use Case"
+
+    def test_disk_hdd_excludes_ssd(self):
+        config = get_preset(PromptType.DISK_HDD)
+        assert "HDD" in config.product_name
+        assert "SSD" not in config.product_name
+        assert "SSD" in config.exclude_text
+        assert "HDD" in config.include_text
+
+    def test_disk_ssd_excludes_hdd(self):
+        config = get_preset(PromptType.DISK_SSD)
+        assert "SSD" in config.product_name
+        assert "HDD" not in config.product_name
+        assert "HDD" in config.exclude_text
+        assert "SSD" in config.include_text
+
+    def test_disk_variants_share_disk_column_layout(self):
+        for prompt_type in (
+            PromptType.DISK,
+            PromptType.DISK_HDD,
+            PromptType.DISK_SSD,
+        ):
+            config = get_preset(prompt_type)
+            assert config.col3_header == "Disk Specs (Type, Interface & Speed)"
+            assert config.col4_header == "Capacity & Form Factor"
             assert config.col6_header == "Compatibility & Ideal Use Case"
 
 
