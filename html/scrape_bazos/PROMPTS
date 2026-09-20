@@ -13,13 +13,17 @@ scrape-bazos.exe search \
     --details-all
 
 ###################################################
-# QUERY - PC PC (hp mini pc)
+# QUERY - PC PC (mini/ssf pc hp/dell/lenovo)
 ###################################################
  scrape-bazos.exe search \
     --category pc --sub-category 'pc' \
     --keyword 'hp prodesk' \
     --keyword 'hp elitedesk' \
     --keyword 'hp engage' \
+    --keyword 'ThinkCentre M920s' \
+    --keyword 'ThinkCentre M90' \
+    --keyword 'OptiPlex 7060' \
+    --keyword 'OptiPlex 7080' \
     --details-all
 
 ###################################################
@@ -55,6 +59,14 @@ scrape-bazos.exe search \
     --details-all
 
 ###################################################
+# QUERY - PC HDD SSD
+###################################################
+scrape-bazos.exe search \
+    --category pc --sub-category 'hdd' \
+    --keyword '' \
+    --details-all
+
+###################################################
 ###################################################
 # PROMPT
 ###################################################
@@ -77,7 +89,7 @@ For **each category**, create a Markdown table containing the following exact co
 3. Do not include any external system citation tags or inline metadata.
 4. Keep descriptions concise and punchy so the table remains easy to read.
 5. Jump straight into the first category table without any introductory text.
-
+6. IMPORTANT: some prizes are listed as minimal prize so don't confused reader tkat this perfect pick
 
 ###################################################
 # PROMPT - RAM
@@ -96,6 +108,27 @@ For **each category**, create a Markdown table containing the following exact co
 1. Use standard bold text for each category title above its respective table.
 2. Embed the direct URL inside the **Model & Link** column using valid Markdown syntax (e.g., `[Corsair Vengeance LPX 32GB](https://direct-link-url.com)`). Ensure full `https://` URLs are used with no trailing space or search query wrappers.
 3. Explicitly note the form factor in the **RAM Specs** column (e.g., *DDR4-3200 MHz DIMM* for desktops or *DDR5-4800 MHz SO-DIMM* for mini PCs/laptops).
+4. Do not include any external system citation tags or inline metadata.
+5. Keep descriptions concise and punchy so the table remains easy to read.
+6. Jump straight into the first category table without any introductory text.
+
+###################################################
+# PROMPT - HDD / SSD
+###################################################
+
+Please analyze the provided dataset or listings and organize the recommended **HDDs and SSDs** into separate section tables based on price categories (**Up to €100**, **€100 – €200**, **€201 – €400**, and **€401+**).
+
+**Strict Exclusion:** Do NOT include complete PCs, laptops/notebooks, external drive enclosures without pre-installed disks, USB flash drives, or SD/MicroSD memory cards. Only list individual internal or external HDDs and SSDs.
+
+For **each category**, create a Markdown table containing the following exact columns:
+
+| Model & Link | Price & Location | Disk Specs (Type, Interface & Speed) | Capacity & Form Factor | Reason for Selection | Compatibility & Ideal Use Case |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+
+**Formatting Rules:**
+1. Use standard bold text for each category title above its respective table.
+2. Embed the direct URL inside the **Model & Link** column using valid Markdown syntax (e.g., `[Samsung 990 PRO 1TB](https://direct-link-url.com)`). Ensure full `https://` URLs are used with no trailing space or search query wrappers.
+3. Explicitly note the drive type, interface, and speed in the **Disk Specs** column (e.g., *NVMe PCIe 4.0 SSD (Up to 7,450 MB/s)*, *SATA III 6Gb/s 2.5" SSD*, or *7200 RPM 3.5" HDD*).
 4. Do not include any external system citation tags or inline metadata.
 5. Keep descriptions concise and punchy so the table remains easy to read.
 6. Jump straight into the first category table without any introductory text.

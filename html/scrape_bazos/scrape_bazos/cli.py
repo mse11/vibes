@@ -279,18 +279,22 @@ def search(category, keyword, price_from, price_to, location, radius, sub_catego
         if not output or output == "bazos_results.json":
             # Replace spaces with underscores in category and keywords for safe filenames
             safe_category = category.replace(" ", "_")
+            safe_subcategory = sub_category.replace(" ", "_") if sub_category else None
             keywords_str = "_".join(k.replace(" ", "_") for k in keyword)
 
+            # Build filename with optional subcategory
+            category_part = f"{safe_category}_{safe_subcategory}" if safe_subcategory else safe_category
+
             if format == "html":
-                output = f"bazos_report_{safe_category}_{keywords_str}.html"
+                output = f"bazos_report_{category_part}_{keywords_str}.html"
             elif format == "html_dynamic":
-                output = f"bazos_report_dynamic_{safe_category}_{keywords_str}.html"
+                output = f"bazos_report_dynamic_{category_part}_{keywords_str}.html"
             elif format == "csv":
-                output = f"bazos_results_{safe_category}_{keywords_str}.csv"
+                output = f"bazos_results_{category_part}_{keywords_str}.csv"
             elif format == "table":
-                output = f"bazos_results_{safe_category}_{keywords_str}.txt"
+                output = f"bazos_results_{category_part}_{keywords_str}.txt"
             else:  # json
-                output = f"bazos_results_{safe_category}_{keywords_str}.json"
+                output = f"bazos_results_{category_part}_{keywords_str}.json"
 
         # Show what we're searching for
         click.echo(f"🔍 Searching for keywords: {click.style(', '.join(keyword), bold=True)}\n")
