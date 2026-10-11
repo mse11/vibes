@@ -4,8 +4,8 @@ Tests for reporter module
 
 import pytest
 from pathlib import Path
-from scrape_bazos.scraper import BazosItem
-from scrape_bazos.reporter import HTMLReportGenerator
+from mse_scrape_bazos.scraper import BazosItem
+from mse_scrape_bazos.reporter import HTMLReportGenerator
 
 
 class TestHTMLReportGenerator:

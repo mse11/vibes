@@ -3,7 +3,7 @@ Tests for scraper module
 """
 
 import pytest
-from scrape_bazos.scraper import BazosScraper, BazosItem
+from mse_scrape_bazos.scraper import BazosScraper, BazosItem
 
 
 class TestBazosItem:

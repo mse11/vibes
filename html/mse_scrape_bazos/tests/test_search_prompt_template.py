@@ -17,8 +17,8 @@ from unittest.mock import patch
 import pytest
 from click.testing import CliRunner
 
-from scrape_bazos.cli import GENERATED_DIR, cli
-from scrape_bazos.scraper import BazosItem
+from mse_scrape_bazos.cli import GENERATED_DIR, cli
+from mse_scrape_bazos.scraper import BazosItem
 
 ITEMS = [
     BazosItem(
@@ -35,10 +35,10 @@ ITEMS = [
 
 @pytest.fixture
 def mocked_scraper():
-    with patch("scrape_bazos.scraper.BazosScraper.get_categories", return_value={"pc": "Computers"}), \
-         patch("scrape_bazos.scraper.BazosScraper.get_subcategories_grouped", return_value={}), \
-         patch("scrape_bazos.scraper.BazosScraper.get_subcategories", return_value={"pamet": "Pamäť"}), \
-         patch("scrape_bazos.scraper.BazosScraper.scrape_listings", return_value=list(ITEMS)):
+    with patch("mse_scrape_bazos.scraper.BazosScraper.get_categories", return_value={"pc": "Computers"}), \
+         patch("mse_scrape_bazos.scraper.BazosScraper.get_subcategories_grouped", return_value={}), \
+         patch("mse_scrape_bazos.scraper.BazosScraper.get_subcategories", return_value={"pamet": "Pamäť"}), \
+         patch("mse_scrape_bazos.scraper.BazosScraper.scrape_listings", return_value=list(ITEMS)):
         yield
 
 

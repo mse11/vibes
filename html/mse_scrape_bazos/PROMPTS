@@ -7,7 +7,7 @@
 ###################################################
 # QUERY - PC NAS
 ###################################################
-scrape-bazos.exe search \
+mse-scrape-bazos.exe search \
     --category pc --sub-category 'pc' \
     --keyword 'nas' \
     --details-all
@@ -15,7 +15,7 @@ scrape-bazos.exe search \
 ###################################################
 # QUERY - PC PC (mini/ssf pc hp/dell/lenovo)
 ###################################################
- scrape-bazos.exe search \
+ mse-scrape-bazos.exe search \
     --category pc --sub-category 'pc' \
     --keyword 'hp prodesk' \
     --keyword 'hp elitedesk' \
@@ -30,14 +30,14 @@ scrape-bazos.exe search \
 ###################################################
 # QUERY - PC NOTAS
 ###################################################
-scrape-bazos.exe search \
+mse-scrape-bazos.exe search \
     --category 'pc' --sub-category 'notebook' \
     --details-all
 
 ###################################################
 # QUERY - PC NOTAS (4 SLOTS)
 ###################################################
-scrape-bazos.exe search \
+mse-scrape-bazos.exe search \
     --category 'pc' --sub-category 'notebook' \
     --keyword 'ZBook Fury' \
     --keyword 'ThinkPad P17' \
@@ -54,7 +54,7 @@ scrape-bazos.exe search \
 ###################################################
 # QUERY - PC MEMORY DDR4 (UDIMM + SODIMM)
 ###################################################
-scrape-bazos.exe search \
+mse-scrape-bazos.exe search \
     --category pc --sub-category 'pamet' \
     --keyword 'DDR4' \
     --prompt-template pamat-udimm \
@@ -66,7 +66,7 @@ IMPORTANT: Ram should be used in HP ELITEDESK 800 G6 SSF as it is 2666 Mhz, 1.2 
 ###################################################
 # QUERY - PC DISK (HDD + SSD)
 ###################################################
-scrape-bazos.exe search \
+mse-scrape-bazos.exe search \
     --category pc --sub-category 'hdd' \
     --keyword '' \
     --prompt-template 'disk-hdd' \
@@ -74,9 +74,9 @@ scrape-bazos.exe search \
     --details-all
 
 ###################################################
-# QUERY - PC GRAFIKA (NVIDIA + AMD + INTEL)
+# QUERY - PC GRAFIKA (NVIDIA + AMD + INTEL)mse
 ###################################################
-scrape-bazos.exe search \
+mse-scrape-bazos.exe search \
     --category pc --sub-category 'graficka' \
     --keyword '' \
     --prompt-template 'grafika-nvidia' \
@@ -87,7 +87,7 @@ scrape-bazos.exe search \
 ###################################################
 # QUERY - DETI AUTOSEDACKA
 ###################################################
-scrape-bazos.exe search \
+mse-scrape-bazos.exe search \
     --category deti --sub-category 'autosedacky' \
     --keyword 'joie' \
     --details-all

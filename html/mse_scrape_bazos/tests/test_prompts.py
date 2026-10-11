@@ -3,7 +3,7 @@ Tests for the LLM prompt generator (prompt command backend)
 """
 
 import pytest
-from scrape_bazos.prompts import (
+from mse_scrape_bazos.prompts import (
     PRESETS,
     PromptConfig,
     PromptType,

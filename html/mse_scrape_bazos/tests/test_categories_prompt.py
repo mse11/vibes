@@ -5,8 +5,8 @@ available for 'prompt --type' and 'search --prompt-template'.
 
 from click.testing import CliRunner
 
-from scrape_bazos.cli import cli
-from scrape_bazos.prompts import PromptType
+from mse_scrape_bazos.cli import cli
+from mse_scrape_bazos.prompts import PromptType
 
 
 class TestCategoriesPrompt:

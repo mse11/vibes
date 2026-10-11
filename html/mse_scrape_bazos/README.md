@@ -42,7 +42,7 @@ A powerful, production-ready Python scraper for extracting classifieds listings 
 
 ```bash
 # Navigate to project directory
-cd D:\MSE\GIT\_MSE_git\vibes\html\scrape_bazos
+cd D:\MSE\GIT\_MSE_git\vibes\html\mse_scrape_bazos
 
 # Install dependencies
 uv sync
@@ -66,26 +66,26 @@ pip install requests beautifulsoup4 lxml pillow
 uv sync
 
 # Start scraping!
-scrape-bazos search --category pc --keyword "nas"
+mse-scrape-bazos search --category pc --keyword "nas"
 ```
 
 ### Basic Search
 
 ```bash
 # Search for NAS in PC category
-scrape-bazos search --category pc --keyword "nas"
+mse-scrape-bazos search --category pc --keyword "nas"
 
 # With price range
-scrape-bazos search --category pc --keyword "notebook" --price-from 500 --price-to 1000
+mse-scrape-bazos search --category pc --keyword "notebook" --price-from 500 --price-to 1000
 
 # Real estate search
-scrape-bazos search --category reality --keyword "byt" --location "Bratislava" --radius 10
+mse-scrape-bazos search --category reality --keyword "byt" --location "Bratislava" --radius 10
 ```
 
 ### Python API
 
 ```python
-from scrape_bazos import BazosScraper
+from mse_scrape_bazos import BazosScraper
 
 scraper = BazosScraper()
 items = scraper.scrape_listings(
@@ -109,22 +109,22 @@ The CLI provides multiple commands for different operations:
 
 ```bash
 # Main search command
-scrape-bazos search [OPTIONS]
+mse-scrape-bazos search [OPTIONS]
 
 # Show available categories
-scrape-bazos categories-search
+mse-scrape-bazos categories-search
 
 # List available prompt template types (for 'prompt --type' / 'search --prompt-template')
-scrape-bazos categories-prompt
+mse-scrape-bazos categories-prompt
 
 # View detailed help
-scrape-bazos search --help
+mse-scrape-bazos search --help
 ```
 
 ### Search Command Options
 
 ```bash
-scrape-bazos search [OPTIONS]
+mse-scrape-bazos search [OPTIONS]
 
 Options:
   --category TEXT         Category (required, e.g., pc, auto, reality)
@@ -145,22 +145,22 @@ Options:
 
 ```bash
 # PC Components
-scrape-bazos search --category pc --keyword "ssd" --price-from 50 --price-to 200
+mse-scrape-bazos search --category pc --keyword "ssd" --price-from 50 --price-to 200
 
 # Used Cars
-scrape-bazos search --category auto --keyword "skoda" --price-to 15000 --pages 3
+mse-scrape-bazos search --category auto --keyword "skoda" --price-to 15000 --pages 3
 
 # Real Estate
-scrape-bazos search --category reality --keyword "byt" --location "Bratislava" --radius 10
+mse-scrape-bazos search --category reality --keyword "byt" --location "Bratislava" --radius 10
 
 # Electronics with console display
-scrape-bazos search --category elektronika --keyword "iphone" --pages 2 --display
+mse-scrape-bazos search --category elektronika --keyword "iphone" --pages 2 --display
 
 # Save as CSV
-scrape-bazos search --category pc --keyword "monitor" --format csv --output monitors.csv
+mse-scrape-bazos search --category pc --keyword "monitor" --format csv --output monitors.csv
 
 # View all available categories
-scrape-bazos categories-search
+mse-scrape-bazos categories-search
 
 ```
 
@@ -259,14 +259,14 @@ report heading and prints a note.
 
 ```bash
 # Interactive report, labelled from the file's own search metadata
-scrape-bazos convert-format -i generated/bazos_results_20260920_pc_pamet_DDR4.json -o report.html
+mse-scrape-bazos convert-format -i generated/bazos_results_20260920_pc_pamet_DDR4.json -o report.html
 
 # Plain static list
-scrape-bazos convert-format -i results.json -o plain.html --static
+mse-scrape-bazos convert-format -i results.json -o plain.html --static
 
 # Other formats -- detected from the output extension
-scrape-bazos convert-format -i results.json -o data.csv
-scrape-bazos convert-format -i results.json -o normalised.json
+mse-scrape-bazos convert-format -i results.json -o data.csv
+mse-scrape-bazos convert-format -i results.json -o normalised.json
 ```
 
 Because the category, keywords and display settings come from the file,
@@ -277,7 +277,7 @@ Because the category, keywords and display settings come from the file,
 Reading a dump from Python:
 
 ```python
-from scrape_bazos import load_results
+from mse_scrape_bazos import load_results
 
 items, metadata, has_metadata = load_results("generated/results.json")
 print(metadata.category_display, "|", metadata.keyword_display)
@@ -307,8 +307,8 @@ Formatted text output for console viewing.
 ## Project Structure
 
 ```
-scrape_bazos/
-├── scrape_bazos/                 Package directory
+mse_scrape_bazos/
+├── mse_scrape_bazos/                 Package directory
 │   ├── __init__.py              Package initialization
 │   ├── scraper.py               Core scraping engine
 │   ├── cli.py                   Command-line interface
@@ -363,7 +363,7 @@ BazosItem(
 ### Example 1: Simple Search
 
 ```python
-from scrape_bazos import BazosScraper
+from mse_scrape_bazos import BazosScraper
 
 scraper = BazosScraper()
 items = scraper.scrape_listings(category="pc", keyword="nas")
@@ -398,7 +398,7 @@ items = scraper.scrape_listings(
 ### Example 4: Generate HTML Report
 
 ```python
-from scrape_bazos import HTMLReportGenerator
+from mse_scrape_bazos import HTMLReportGenerator
 
 scraper = BazosScraper()
 items = scraper.scrape_listings(category="pc", keyword="gpu", max_pages=1)
@@ -415,7 +415,7 @@ generator.generate_report(
 ### Example 5: Download Images & Generate Report
 
 ```python
-from scrape_bazos import ImageDownloader, HTMLReportGenerator
+from mse_scrape_bazos import ImageDownloader, HTMLReportGenerator
 
 scraper = BazosScraper()
 items = scraper.scrape_listings(category="pc", keyword="monitor")
@@ -448,7 +448,7 @@ This runs 7 complete working examples covering all features.
 ### BazosScraper
 
 ```python
-from scrape_bazos import BazosScraper
+from mse_scrape_bazos import BazosScraper
 
 scraper = BazosScraper(timeout=10)  # timeout in seconds
 
@@ -480,7 +480,7 @@ scraper.save_results(items, "results.json")
 ### ImageDownloader
 
 ```python
-from scrape_bazos import ImageDownloader
+from mse_scrape_bazos import ImageDownloader
 
 downloader = ImageDownloader(output_dir="images")
 
@@ -497,7 +497,7 @@ image_map = downloader.download_all_images(items)
 ### HTMLReportGenerator
 
 ```python
-from scrape_bazos import HTMLReportGenerator
+from mse_scrape_bazos import HTMLReportGenerator
 
 generator = HTMLReportGenerator()
 
@@ -595,7 +595,7 @@ Run the test suite:
 uv run pytest tests/ -v
 
 # With coverage report
-uv run pytest tests/ --cov=scrape_bazos
+uv run pytest tests/ --cov=mse_scrape_bazos
 
 # Specific test file
 uv run pytest tests/test_scraper.py -v
@@ -613,7 +613,7 @@ The project includes 35+ unit tests covering:
 
 ## Troubleshooting
 
-### "ModuleNotFoundError: No module named 'scrape_bazos'"
+### "ModuleNotFoundError: No module named 'mse_scrape_bazos'"
 
 **Solution:** Make sure you've run `uv sync` and are in the project directory.
 
@@ -640,7 +640,7 @@ uv sync
 **Solution:** Increase the timeout:
 
 ```bash
-python -m scrape_bazos.cli --category pc --keyword "ssd" --timeout 20
+python -m mse_scrape_bazos.cli --category pc --keyword "ssd" --timeout 20
 ```
 
 Or in Python:
@@ -668,7 +668,7 @@ generator.generate_report(items, "report.html", image_map=image_map)
 **Solution:** Add delays between requests or reduce page count:
 
 ```bash
-python -m scrape_bazos.cli --category pc --keyword "ssd" --pages 1
+python -m mse_scrape_bazos.cli --category pc --keyword "ssd" --pages 1
 ```
 
 ### Import errors after migration
@@ -677,8 +677,8 @@ If you get import errors after moving to the flat structure:
 
 1. Delete `.venv/` folder
 2. Run `uv sync` again
-3. Verify `scrape_bazos/` directory exists at project root
-4. Check `scrape_bazos/__init__.py` exists
+3. Verify `mse_scrape_bazos/` directory exists at project root
+4. Check `mse_scrape_bazos/__init__.py` exists
 
 ## Development Setup
 
@@ -697,13 +697,13 @@ This includes:
 Format code:
 
 ```bash
-uv run black scrape_bazos/ tests/
+uv run black mse_scrape_bazos/ tests/
 ```
 
 Run linter:
 
 ```bash
-uv run ruff check scrape_bazos/ tests/
+uv run ruff check mse_scrape_bazos/ tests/
 ```
 
 ## Performance Tips
@@ -738,7 +738,7 @@ MIT License - Feel free to use for personal projects
 ## Support & Documentation
 
 - **Quick examples:** See `example.py`
-- **CLI help:** Run `python -m scrape_bazos.cli --help`
+- **CLI help:** Run `python -m mse_scrape_bazos.cli --help`
 - **Test suite:** Run `uv run pytest tests/ -v`
 - **Code:** Check docstrings in source files
 

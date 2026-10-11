@@ -7,7 +7,7 @@ from pathlib import Path
 
 from click.testing import CliRunner
 
-from scrape_bazos.cli import GENERATED_DIR, _generated_dir, _generated_path, cli
+from mse_scrape_bazos.cli import GENERATED_DIR, _generated_dir, _generated_path, cli
 
 
 class TestGeneratedPathHelper:

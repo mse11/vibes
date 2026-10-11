@@ -12,8 +12,8 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 
-from scrape_bazos.cli import cli
-from scrape_bazos.scraper import (
+from mse_scrape_bazos.cli import cli
+from mse_scrape_bazos.scraper import (
     SCHEMA_VERSION,
     BazosItem,
     BazosItemDetails,

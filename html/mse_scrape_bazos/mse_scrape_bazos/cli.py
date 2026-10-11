@@ -53,7 +53,7 @@ def _generated_dir(dirname: str) -> str:
 
 
 @click.group()
-@click.version_option(version="0.1.0", prog_name="scrape-bazos")
+@click.version_option(version="0.1.0", prog_name="mse-scrape-bazos")
 def cli():
     """
     🔍 Bazos.sk Web Scraper
@@ -222,44 +222,44 @@ def search(category, keyword, price_from, price_to, location, radius, sub_catego
     Examples:
 
         # Single keyword - generates interactive HTML report by default
-        scrape-bazos search --category pc --keyword "nas"
+        mse-scrape-bazos search --category pc --keyword "nas"
 
         # Multiple keywords - each scraped separately and merged
-        scrape-bazos search --category pc --keyword "nas" --keyword "backup"
+        mse-scrape-bazos search --category pc --keyword "nas" --keyword "backup"
 
         # Limit to specific number of pages (quick sample)
-        scrape-bazos search --category pc --keyword "nas" --pages-get 2
+        mse-scrape-bazos search --category pc --keyword "nas" --pages-get 2
 
         # Export as JSON
-        scrape-bazos search --category pc --keyword "nas" --format json
+        mse-scrape-bazos search --category pc --keyword "nas" --format json
 
         # Static HTML report
-        scrape-bazos search --category pc --keyword "nas" --format html
+        mse-scrape-bazos search --category pc --keyword "nas" --format html
 
         # Download images with HTML report
-        scrape-bazos search --category pc --keyword "nas" --download-images
+        mse-scrape-bazos search --category pc --keyword "nas" --download-images
 
         # Multiple keywords with page limit
-        scrape-bazos search --category pc --keyword "nas" --keyword "backup" --pages-get 2
+        mse-scrape-bazos search --category pc --keyword "nas" --keyword "backup" --pages-get 2
 
         # Check available pages for each keyword
-        scrape-bazos search --category pc --keyword "nas" --keyword "backup" --pages-count
+        mse-scrape-bazos search --category pc --keyword "nas" --keyword "backup" --pages-count
 
-        scrape-bazos search --category pc --keyword "notebook" --price-from 500 --price-to 1000
+        mse-scrape-bazos search --category pc --keyword "notebook" --price-from 500 --price-to 1000
 
-        scrape-bazos search --category auto --keyword "skoda" --price-to 15000
+        mse-scrape-bazos search --category auto --keyword "skoda" --price-to 15000
 
-        scrape-bazos search --category reality --keyword "byt" --location "Bratislava" --radius 10 --format csv
+        mse-scrape-bazos search --category reality --keyword "byt" --location "Bratislava" --radius 10 --format csv
 
-        scrape-bazos search --category pc --keyword "nas" --pages-get 2 --details-all --display
+        mse-scrape-bazos search --category pc --keyword "nas" --pages-get 2 --details-all --display
 
         # Also dump a matching LLM prompt (generated/bazos_report_dynamic_YYYYMMDD_pc_pamet_DDR4.md)
-        scrape-bazos search --category pc --sub-category pamet --keyword "DDR4" --prompt-template pamat
+        mse-scrape-bazos search --category pc --sub-category pamet --keyword "DDR4" --prompt-template pamat
 
         # Repeat --prompt-template to get several prompts from ONE scrape, so the
         # LLM can produce more/differently-targeted results from the same source
         # data (writes ..._pamat.md and ..._disk-ssd.md next to the one JSON/HTML)
-        scrape-bazos search --category pc --keyword "DDR4" --prompt-template pamat --prompt-template disk-ssd
+        mse-scrape-bazos search --category pc --keyword "DDR4" --prompt-template pamat --prompt-template disk-ssd
     """
     try:
         # Validate HTML-specific options
@@ -291,7 +291,7 @@ def search(category, keyword, price_from, price_to, location, radius, sub_catego
                     for cat_code, cat_desc in sorted(available_categories.items()):
                         click.echo(f"  {click.style(cat_code.ljust(15), fg='cyan')} → {cat_desc}", err=True)
                     click.echo(f"\n✅ Found {len(available_categories)} categories", err=True)
-                    click.echo("\nUsage: scrape-bazos search --category <category_code> --keyword <keyword>", err=True)
+                    click.echo("\nUsage: mse-scrape-bazos search --category <category_code> --keyword <keyword>", err=True)
                     raise SystemExit(1)
             else:
                 # If we can't fetch categories, log a warning but continue
@@ -326,7 +326,7 @@ def search(category, keyword, price_from, price_to, location, radius, sub_catego
                         subcat_count = len(group_data.get('subcategories', {}))
                         click.echo(f"  {click.style(group_id.ljust(15), fg='cyan')} → {group_name} ({subcat_count} items)", err=True)
                     click.echo(f"\n✅ Found {len(grouped_categories)} available subcategory/group(s)", err=True)
-                    click.echo("\nUsage: scrape-bazos search --category <category> --sub-category <subcategory> --keyword <keyword>", err=True)
+                    click.echo("\nUsage: mse-scrape-bazos search --category <category> --sub-category <subcategory> --keyword <keyword>", err=True)
                     raise SystemExit(1)
                 else:
                     # Show which subcategory was selected
@@ -342,7 +342,7 @@ def search(category, keyword, price_from, price_to, location, radius, sub_catego
                     for subcat_id, subcat_name in sorted(flat_categories.items()):
                         click.echo(f"  {click.style(subcat_id.ljust(15), fg='cyan')} → {subcat_name}", err=True)
                     click.echo(f"\n✅ Found {len(flat_categories)} available subcategories", err=True)
-                    click.echo("\nUsage: scrape-bazos search --category <category> --sub-category <subcategory> --keyword <keyword>", err=True)
+                    click.echo("\nUsage: mse-scrape-bazos search --category <category> --sub-category <subcategory> --keyword <keyword>", err=True)
                     raise SystemExit(1)
                 else:
                     # Show which subcategory was selected
@@ -353,7 +353,7 @@ def search(category, keyword, price_from, price_to, location, radius, sub_catego
                 click.echo(f"❌ Invalid sub-category: '{click.style(sub_category, bold=True)}'", err=True)
                 click.echo(f"\n📂 Available Subcategories for '{category}':\n", err=True)
                 click.echo(f"  (no subcategories available for this category)", err=True)
-                click.echo(f"\nUsage: scrape-bazos search --category <category> --sub-category <subcategory> --keyword <keyword>", err=True)
+                click.echo(f"\nUsage: mse-scrape-bazos search --category <category> --sub-category <subcategory> --keyword <keyword>", err=True)
                 raise SystemExit(1)
 
         # Auto-generate output filename if not provided
@@ -618,7 +618,7 @@ def search(category, keyword, price_from, price_to, location, radius, sub_catego
                 if template_type is PromptType.CUSTOM:
                     click.echo(
                         "⚠️  --prompt-template custom has no preset content; "
-                        "use 'scrape-bazos prompt --type custom ...' directly to build one.",
+                        "use 'mse-scrape-bazos prompt --type custom ...' directly to build one.",
                         err=False,
                     )
                     continue
@@ -670,11 +670,11 @@ def categories_search(show_subcategories, category, details_all):
     IMPROVED: Auto-detects grouped vs flat subcategories and displays them appropriately.
 
     Examples:
-        scrape-bazos categories-search                              # List all main categories
-        scrape-bazos categories-search -s                           # List categories with subcategories
-        scrape-bazos categories-search -s -c pc                     # Show only PC category with its subcategories
-        scrape-bazos categories-search -s -c reality                # Show grouped categories (Predaj, Prenájom, etc.)
-        scrape-bazos categories-search -s -c reality -da            # Show grouped categories with full URLs
+        mse-scrape-bazos categories-search                              # List all main categories
+        mse-scrape-bazos categories-search -s                           # List categories with subcategories
+        mse-scrape-bazos categories-search -s -c pc                     # Show only PC category with its subcategories
+        mse-scrape-bazos categories-search -s -c reality                # Show grouped categories (Predaj, Prenájom, etc.)
+        mse-scrape-bazos categories-search -s -c reality -da            # Show grouped categories with full URLs
     """
     try:
         scraper = BazosScraper()
@@ -798,7 +798,7 @@ def categories_search(show_subcategories, category, details_all):
                     click.echo(f"\n⚠️  {len(failed_categories)} categor{'y' if len(failed_categories) == 1 else 'ies'} timed out:")
                     for cat_code, error in failed_categories:
                         click.echo(f"   - {cat_code}: {error}")
-                    click.echo(f"\n💡 Tip: Try fetching individual categories with: scrape-bazos categories-search -s -c {failed_categories[0][0]}")
+                    click.echo(f"\n💡 Tip: Try fetching individual categories with: mse-scrape-bazos categories-search -s -c {failed_categories[0][0]}")
 
         else:
             # Show only main categories (original behavior)
@@ -813,7 +813,7 @@ def categories_search(show_subcategories, category, details_all):
             for category_code, description in sorted(categories_list.items()):
                 click.echo(f"  {click.style(category_code.ljust(15), fg='cyan')} → {description}")
             click.echo(f"\n✅ Found {len(categories_list)} categories")
-            click.echo(f"💡 Tip: Use 'scrape-bazos categories-search -s' to see subcategories")
+            click.echo(f"💡 Tip: Use 'mse-scrape-bazos categories-search -s' to see subcategories")
 
         click.echo()
 
@@ -890,15 +890,15 @@ def convert_format(input, output, no_images, download_images, images_dir, static
 
     Examples:
 
-        scrape-bazos convert-format --input bazos_results.json -o report.html
+        mse-scrape-bazos convert-format --input bazos_results.json -o report.html
 
-        scrape-bazos convert-format -i results.json -o plain.html --static
+        mse-scrape-bazos convert-format -i results.json -o plain.html --static
 
-        scrape-bazos convert-format -i results.json -o data.csv
+        mse-scrape-bazos convert-format -i results.json -o data.csv
 
-        scrape-bazos convert-format -i results.json -o report.html --download-images --images-dir ./images
+        mse-scrape-bazos convert-format -i results.json -o report.html --download-images --images-dir ./images
 
-        scrape-bazos convert-format -i results.json -o formatted_results.json
+        mse-scrape-bazos convert-format -i results.json -o formatted_results.json
     """
     try:
         # Load JSON file. load_results() rebuilds nested item_details as
@@ -1065,8 +1065,8 @@ def categories_prompt(details):
     category.
 
     Examples:
-        scrape-bazos categories-prompt                # List all prompt template types
-        scrape-bazos categories-prompt -d              # Show full preset details for each type
+        mse-scrape-bazos categories-prompt                # List all prompt template types
+        mse-scrape-bazos categories-prompt -d              # Show full preset details for each type
     """
     click.echo("📂 Available Prompt Template Types:\n")
 
@@ -1097,7 +1097,7 @@ def categories_prompt(details):
 
     click.echo(f"✅ Found {len(PromptType)} prompt template type(s)")
     click.echo(
-        "💡 Tip: Use 'scrape-bazos prompt --type <type> --print --no-file' to preview a full prompt"
+        "💡 Tip: Use 'mse-scrape-bazos prompt --type <type> --print --no-file' to preview a full prompt"
     )
 
 
@@ -1217,25 +1217,25 @@ def prompt(
     Examples:
 
         # Use a built-in type as-is
-        scrape-bazos prompt --type pamat
+        mse-scrape-bazos prompt --type pamat
 
         # Same type, different price ladder
-        scrape-bazos prompt --type pc --price-tier 200 --price-tier 400 --price-tier 600
+        mse-scrape-bazos prompt --type pc --price-tier 200 --price-tier 400 --price-tier 600
 
         # New product type using the generic column layout
-        scrape-bazos prompt --type custom --product-name "graphics cards" \\
+        mse-scrape-bazos prompt --type custom --product-name "graphics cards" \\
             --price-tier 150 --price-tier 300 --price-tier 500 \\
             --exclude "prebuilt PCs or laptops with a GPU inside" \\
             --include "standalone desktop graphics cards"
 
         # Print instead of/as well as saving, and also append to PROMPTS
-        scrape-bazos prompt --type disk --print --append-to-prompts PROMPTS
+        mse-scrape-bazos prompt --type disk --print --append-to-prompts PROMPTS
 
         # SSD-only or HDD-only variants
-        scrape-bazos prompt --type disk-ssd
-        scrape-bazos prompt --type disk-hdd
-        scrape-bazos prompt --type grafika-nvidia
-        scrape-bazos prompt --type grafika-amd
+        mse-scrape-bazos prompt --type disk-ssd
+        mse-scrape-bazos prompt --type disk-hdd
+        mse-scrape-bazos prompt --type grafika-nvidia
+        mse-scrape-bazos prompt --type grafika-amd
     """
     try:
         prompt_type = PromptType(prompt_type)
