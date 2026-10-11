@@ -1792,10 +1792,11 @@ class HTMLReportGenerator:
                             <div class="filters-actions">
                                 <button id="addFilterBtn" class="add-filter-btn">+ Add Filter</button>
                                 <button id="clearAllFiltersBtn" class="clear-all-filters-btn">Clear All Filters</button>
-                                <label class="match-mode" for="matchMode" title="Diacritics-insensitive: 'otocna' also matches 'otočná' (like the bazos.sk search box). Exact: match the letters exactly as typed.">
+                                <label class="match-mode" for="matchMode" title="Ignore diacritics: 'otocna' also matches 'otočná' (like the bazos.sk search box). Ignore diacritics + spaces: additionally '32GB' matches '32 GB' (and vice versa). Exact: match the letters exactly as typed.">
                                     Matching:
                                     <select id="matchMode" class="match-mode-select">
                                         <option value="fold" selected>Ignore diacritics (č = c)</option>
+                                        <option value="loose">Ignore diacritics + spaces (32GB = 32 GB)</option>
                                         <option value="exact">Exact</option>
                                     </select>
                                 </label>
@@ -1838,15 +1839,31 @@ class HTMLReportGenerator:
                 const DEFAULT_FILTER_KEY = 'any';
 
                 // NEW: keyword matching mode.
-                // true  -> diacritics-insensitive (default): 'otocna' matches 'otočná',
-                //          'otočná' matches 'otocna'. This is how bazos.sk itself searches.
-                // false -> exact: the letters must match as typed.
-                let ignoreDiacritics = true;
+                // 'fold'  -> diacritics-insensitive (default): 'otocna' matches 'otočná',
+                //            'otočná' matches 'otocna'. This is how bazos.sk itself searches.
+                // 'loose' -> 'fold' plus all whitespace ignored: '32GB' matches '32 GB'
+                //            and '32 GB' matches '32GB'.
+                // 'exact' -> the letters must match as typed.
+                let matchMode = 'fold';
 
                 // Strip combining marks so č->c, š->s, á->a, ľ->l, ô->o, ...
                 function foldDiacritics(text) {{
                     return text.normalize('NFD').replace(/[\\u0300-\\u036f]/g, '');
                 }}
+
+                // Remove every whitespace character (space, NBSP, tab, newline).
+                function stripSpaces(text) {{
+                    return text.replace(/\\s+/g, '');
+                }}
+
+                // Normalise an already-lowercased string for the given matching mode.
+                function normalizeText(text, mode) {{
+                    if (mode === 'exact') return text;
+                    text = foldDiacritics(text);
+                    return mode === 'loose' ? stripSpaces(text) : text;
+                }}
+
+                const CACHE_KEYS = {{ exact: '__lc', fold: '__fd', loose: '__ls' }};
 
                 // ===== IMAGE MODAL FUNCTIONS =====
                 function openImage(src) {{
@@ -1938,31 +1955,33 @@ class HTMLReportGenerator:
                 // Filtering and sorting used to re-lowercase and re-parse the same
                 // strings on every keystroke. Each derived value is computed once
                 // per item and reused for the life of the page.
-                // `folded` picks the diacritics-stripped variant; both variants are
-                // cached separately so switching the matching mode costs nothing.
-                function lcField(item, key, folded) {{
-                    const cacheKey = folded ? '__fd' : '__lc';
+                // `mode` picks the normalised variant; each variant is cached
+                // separately so switching the matching mode costs nothing.
+                function lcField(item, key, mode) {{
+                    const cacheKey = CACHE_KEYS[mode];
                     let cache = item[cacheKey];
                     if (cache === undefined) {{
                         cache = item[cacheKey] = Object.create(null);
                     }}
                     let value = cache[key];
                     if (value === undefined) {{
-                        let raw;
                         if (key === 'any') {{
-                            // Virtual key: every field joined with a newline so a needle
-                            // can never match across a field boundary.
+                            // Virtual key: every field normalised on its own, then joined
+                            // with a separator that is never whitespace, so a needle can
+                            // never match across a field boundary (even in 'loose' mode,
+                            // which strips whitespace).
                             const parts = [];
                             for (let k = 0; k < SEARCH_ALL_KEYS.length; k++) {{
                                 const v = item[SEARCH_ALL_KEYS[k]];
-                                if (v !== null && v !== undefined) parts.push(String(v));
+                                if (v !== null && v !== undefined) {{
+                                    parts.push(normalizeText(String(v).toLowerCase(), mode));
+                                }}
                             }}
-                            raw = parts.join('\\n');
+                            value = parts.join('\\u0001');
                         }} else {{
-                            raw = String(item[key] === null || item[key] === undefined ? '' : item[key]);
+                            const raw = String(item[key] === null || item[key] === undefined ? '' : item[key]);
+                            value = normalizeText(raw.toLowerCase(), mode);
                         }}
-                        value = raw.toLowerCase();
-                        if (folded) value = foldDiacritics(value);
                         cache[key] = value;
                     }}
                     return value;
@@ -1976,13 +1995,20 @@ class HTMLReportGenerator:
                     return p;
                 }}
 
-                function itemCity(item, folded) {{
-                    if (folded) {{
+                function itemCity(item, mode) {{
+                    if (mode === 'fold') {{
                         let cf = item.__cityFd;
                         if (cf === undefined) {{
-                            cf = item.__cityFd = foldDiacritics(itemCity(item, false));
+                            cf = item.__cityFd = normalizeText(itemCity(item, 'exact'), 'fold');
                         }}
                         return cf;
+                    }}
+                    if (mode === 'loose') {{
+                        let cl = item.__cityLs;
+                        if (cl === undefined) {{
+                            cl = item.__cityLs = normalizeText(itemCity(item, 'exact'), 'loose');
+                        }}
+                        return cl;
                     }}
                     let c = item.__city;
                     if (c === undefined) {{
@@ -1995,7 +2021,7 @@ class HTMLReportGenerator:
                 function saveFiltersToStorage() {{
                     try {{
                         localStorage.setItem('cascadingFilters', JSON.stringify(filters));
-                        localStorage.setItem('filterMatchMode', ignoreDiacritics ? 'fold' : 'exact');
+                        localStorage.setItem('filterMatchMode', matchMode);
                     }} catch(e) {{
                         // localStorage not available
                     }}
@@ -2008,15 +2034,15 @@ class HTMLReportGenerator:
                             filters = JSON.parse(stored);
                         }}
                         const mode = localStorage.getItem('filterMatchMode');
-                        if (mode) {{
-                            ignoreDiacritics = mode !== 'exact';
+                        if (mode && CACHE_KEYS[mode]) {{
+                            matchMode = mode;
                         }}
                     }} catch(e) {{
                         // localStorage not available
                         filters = [{{ key: DEFAULT_FILTER_KEY, value: '' }}];
                     }}
                     const modeSelect = document.getElementById('matchMode');
-                    if (modeSelect) modeSelect.value = ignoreDiacritics ? 'fold' : 'exact';
+                    if (modeSelect) modeSelect.value = matchMode;
                 }}
 
                 function renderFilterRows() {{
@@ -2078,15 +2104,15 @@ class HTMLReportGenerator:
                     // Get base filters
                     const priceFrom = parseFloat(document.getElementById('priceFrom').value) || 0;
                     const priceTo = parseFloat(document.getElementById('priceTo').value) || Infinity;
-                    const fold = ignoreDiacritics;
+                    const fold = matchMode;
                     let locationFilter = document.getElementById('locationFilter')?.value.toLowerCase() || '';
-                    if (fold && locationFilter) locationFilter = foldDiacritics(locationFilter);
+                    if (locationFilter) locationFilter = normalizeText(locationFilter, fold);
 
                     // PERF: normalise the active filters once, not once per item.
                     const activeFilters = [];
                     for (let i = 0; i < filters.length; i++) {{
                         let needle = (filters[i].value || '').trim().toLowerCase();
-                        if (fold && needle) needle = foldDiacritics(needle);
+                        if (needle) needle = normalizeText(needle, fold);
                         if (needle) activeFilters.push({{ key: filters[i].key, needle: needle }});
                     }}
 
@@ -2422,7 +2448,7 @@ class HTMLReportGenerator:
                 document.getElementById('addFilterBtn').addEventListener('click', addFilter);
                 document.getElementById('clearAllFiltersBtn').addEventListener('click', clearAllFilters);
                 document.getElementById('matchMode').addEventListener('change', (e) => {{
-                    ignoreDiacritics = e.target.value !== 'exact';
+                    matchMode = CACHE_KEYS[e.target.value] ? e.target.value : 'fold';
                     saveFiltersToStorage();
                     applyAllFilters();
                 }});

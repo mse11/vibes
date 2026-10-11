@@ -61,6 +61,8 @@ scrape-bazos.exe search \
     --prompt-template pamat-sodimm \
     --details-all
 
+IMPORTANT: Ram should be used in HP ELITEDESK 800 G6 SSF as it is 2666 Mhz, 1.2 V without XMP support
+
 ###################################################
 # QUERY - PC DISK (HDD + SSD)
 ###################################################
