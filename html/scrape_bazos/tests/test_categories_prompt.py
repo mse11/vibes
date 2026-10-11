@@ -69,3 +69,12 @@ class TestCategoriesPrompt:
         assert "disk" in result.output
         assert "disk-hdd" in result.output
         assert "disk-ssd" in result.output
+
+    def test_gpu_variants_all_listed(self):
+        """The grafika / grafika-nvidia / grafika-amd variants are each listed."""
+        runner = CliRunner()
+        result = runner.invoke(cli, ["categories-prompt"])
+        assert result.exit_code == 0, result.output
+        assert "grafika" in result.output
+        assert "grafika-nvidia" in result.output
+        assert "grafika-amd" in result.output

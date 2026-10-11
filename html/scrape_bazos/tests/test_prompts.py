@@ -132,6 +132,41 @@ class TestPromptType:
             assert config.col4_header == "Capacity & Form Factor"
             assert config.col6_header == "Compatibility & Ideal Use Case"
 
+    def test_gpu_nvidia_excludes_other_vendors(self):
+        config = get_preset(PromptType.GPU_NVIDIA)
+        assert "NVIDIA" in config.product_name
+        assert "AMD" in config.exclude_text
+        assert "NVIDIA" in config.include_text
+
+    def test_gpu_amd_excludes_other_vendors(self):
+        config = get_preset(PromptType.GPU_AMD)
+        assert "AMD" in config.product_name
+        assert "NVIDIA" in config.exclude_text
+        assert "AMD" in config.include_text
+
+    def test_gpu_intel_excludes_other_vendors(self):
+        config = get_preset(PromptType.GPU_INTEL)
+        assert "Intel" in config.product_name
+        assert "NVIDIA" in config.exclude_text
+
+    def test_gpu_values(self):
+        assert PromptType.GPU.value == "grafika"
+        assert PromptType.GPU_NVIDIA.value == "grafika-nvidia"
+        assert PromptType.GPU_AMD.value == "grafika-amd"
+
+    def test_gpu_variants_share_gpu_column_layout(self):
+        for prompt_type in (
+            PromptType.GPU,
+            PromptType.GPU_NVIDIA,
+            PromptType.GPU_AMD,
+            PromptType.GPU_INTEL,
+        ):
+            config = get_preset(prompt_type)
+            assert config.col3_header == "GPU Specs (Chip & Architecture)"
+            assert config.col4_header == "VRAM & Form Factor"
+            assert config.col6_header == "Compatibility & Ideal Use Case"
+            assert "GPU Specs" in render_prompt(config)
+
 
 class TestRenderPrompt:
     """Test the rendered Markdown prompt text"""

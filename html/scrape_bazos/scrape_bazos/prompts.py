@@ -41,6 +41,10 @@ class PromptType(str, Enum):
     DISK = "disk"
     DISK_HDD = "disk-hdd"
     DISK_SSD = "disk-ssd"
+    GPU = "grafika"
+    GPU_NVIDIA = "grafika-nvidia"
+    GPU_AMD = "grafika-amd"
+    GPU_INTEL = "grafika-intel"
     CUSTOM = "custom"
 
 
@@ -261,6 +265,102 @@ PRESETS: Dict[PromptType, PromptConfig] = {
         ),
         include_text="individual internal or external SSDs (SATA, NVMe, or M.2)",
     ),
+    PromptType.GPU: PromptConfig(
+        product_name="graphics cards (GPUs)",
+        price_tiers=[100, 200, 400],
+        col3_header="GPU Specs (Chip & Architecture)",
+        col4_header="VRAM & Form Factor",
+        col6_header="Compatibility & Ideal Use Case",
+        col3_note=(
+            "Explicitly note the GPU chip/series and manufacturer in the "
+            "**GPU Specs** column (e.g., *NVIDIA GeForce RTX 3060 Ti "
+            "(Ampere)*, *AMD Radeon RX 6700 XT (RDNA 2)*, or *Intel Arc "
+            "A750*). In **VRAM & Form Factor** note the memory size/type "
+            "and whether the card is full-height or low-profile, plus slot "
+            "width and required power connectors when stated."
+        ),
+        example_item="MSI GeForce RTX 3060 Ti 8GB",
+        exclude_text=(
+            "complete PCs, laptops/notebooks, or mini PCs with a GPU "
+            "inside, mining rigs, GPU-only water blocks/coolers, "
+            "riser cables, or listings for broken/defective cards sold "
+            "\"for parts\" (unless clearly labeled)"
+        ),
+        include_text=(
+            "standalone desktop graphics cards (NVIDIA, AMD, or Intel)"
+        ),
+        extra_rules=[
+            "Mention in the **Reason for Selection** or **Compatibility** "
+            "column if the listing states the card was used for mining, "
+            "has a warranty, or comes with the original box.",
+        ],
+    ),
+    PromptType.GPU_NVIDIA: PromptConfig(
+        product_name="NVIDIA graphics cards (GeForce, Quadro/RTX A-series, Tesla)",
+        price_tiers=[100, 200, 400],
+        col3_header="GPU Specs (Chip & Architecture)",
+        col4_header="VRAM & Form Factor",
+        col6_header="Compatibility & Ideal Use Case",
+        col3_note=(
+            "Explicitly note the GPU model and architecture in the "
+            "**GPU Specs** column (e.g., *NVIDIA GeForce RTX 3060 Ti "
+            "(Ampere)* or *GeForce GTX 1660 Super (Turing)*). Only NVIDIA "
+            "cards belong here -- never an AMD or Intel card. In **VRAM & "
+            "Form Factor** note the memory size and whether it is "
+            "full-height or low-profile, plus power connectors when stated."
+        ),
+        example_item="MSI GeForce RTX 3060 Ti 8GB",
+        exclude_text=(
+            "complete PCs, laptops/notebooks, mini PCs with a GPU inside, "
+            "mining rigs, GPU-only coolers/water blocks, riser cables, "
+            "or any AMD Radeon or Intel Arc card"
+        ),
+        include_text="standalone NVIDIA graphics cards",
+    ),
+    PromptType.GPU_AMD: PromptConfig(
+        product_name="AMD graphics cards (Radeon, Radeon Pro)",
+        price_tiers=[100, 200, 400],
+        col3_header="GPU Specs (Chip & Architecture)",
+        col4_header="VRAM & Form Factor",
+        col6_header="Compatibility & Ideal Use Case",
+        col3_note=(
+            "Explicitly note the GPU model and architecture in the "
+            "**GPU Specs** column (e.g., *AMD Radeon RX 6700 XT (RDNA 2)* "
+            "or *Radeon RX 580 (Polaris)*). Only AMD cards belong here -- "
+            "never an NVIDIA or Intel card. In **VRAM & Form Factor** note "
+            "the memory size and whether it is full-height or low-profile, "
+            "plus power connectors when stated."
+        ),
+        example_item="Sapphire Pulse Radeon RX 6700 XT 12GB",
+        exclude_text=(
+            "complete PCs, laptops/notebooks, mini PCs with a GPU inside, "
+            "mining rigs, GPU-only coolers/water blocks, riser cables, "
+            "or any NVIDIA GeForce/Quadro or Intel Arc card"
+        ),
+        include_text="standalone AMD Radeon graphics cards",
+    ),
+    PromptType.GPU_INTEL: PromptConfig(
+        product_name="Intel graphics cards (Arc)",
+        price_tiers=[100, 200, 400],
+        col3_header="GPU Specs (Chip & Architecture)",
+        col4_header="VRAM & Form Factor",
+        col6_header="Compatibility & Ideal Use Case",
+        col3_note=(
+            "Explicitly note the GPU model and architecture in the "
+            "**GPU Specs** column (e.g., *Intel Arc A750 (Alchemist)*). "
+            "Only Intel cards belong here -- never an NVIDIA or AMD card. "
+            "In **VRAM & Form Factor** note the memory size and form "
+            "factor, plus power connectors when stated. Mention Resizable "
+            "BAR requirements in the compatibility column."
+        ),
+        example_item="ASRock Intel Arc A750 8GB",
+        exclude_text=(
+            "complete PCs, laptops/notebooks, mini PCs with a GPU inside, "
+            "mining rigs, GPU-only coolers/water blocks, riser cables, "
+            "or any NVIDIA or AMD card"
+        ),
+        include_text="standalone Intel Arc graphics cards",
+    ),
 }
 
 
@@ -362,7 +462,7 @@ def render_prompt(config: PromptConfig) -> str:
     rules = [
         "Use standard bold text for each category title above its respective table.",
         (
-            "Embed the direct URL inside the **Model & Link** column using "
+            "Embed the direct URL from inside the **Model & Link** column using "
             f"valid Markdown syntax (e.g., `[{config.example_item}]"
             "(https://direct-link-url.com)`). Ensure full `https://` URLs "
             "are used with no trailing space or search query wrappers."

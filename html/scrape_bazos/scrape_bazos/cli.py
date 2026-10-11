@@ -191,7 +191,8 @@ def cli():
         "generated/<output-name>.md name. Repeating the same value is "
         "de-duplicated. Must name an existing preset (pc, notebook, pamat, "
         "pamat-sodimm, pamat-udimm, pamat-rdimm, disk, disk-hdd, "
-        "disk-ssd); 'custom' has no fixed preset content and is skipped "
+        "disk-ssd, grafika, grafika-nvidia, grafika-amd, grafika-intel); "
+        "'custom' has no fixed preset content and is skipped "
         "with a warning."
     ),
 )
@@ -1115,7 +1116,9 @@ def categories_prompt(details):
         "pamat-udimm (desktop UDIMM, ECC or non-ECC) additionally calls out "
         "ECC status in its RAM Specs column, disk (any drive) / disk-hdd "
         "(HDDs only) / disk-ssd (SSDs only) use Disk Specs + Capacity & "
-        "Form Factor + Compatibility & Ideal Use Case, and custom uses the "
+        "Form Factor + Compatibility & Ideal Use Case, grafika (any GPU) / "
+        "grafika-nvidia / grafika-amd / grafika-intel use GPU Specs + VRAM "
+        "& Form Factor + Compatibility & Ideal Use Case, and custom uses the "
         "generic Key Specifications + Capacity & Configuration + "
         "Compatibility & Ideal Use Case. Column headers are not "
         "configurable from the CLI -- add a new PromptType in prompts.py "
@@ -1231,6 +1234,8 @@ def prompt(
         # SSD-only or HDD-only variants
         scrape-bazos prompt --type disk-ssd
         scrape-bazos prompt --type disk-hdd
+        scrape-bazos prompt --type grafika-nvidia
+        scrape-bazos prompt --type grafika-amd
     """
     try:
         prompt_type = PromptType(prompt_type)

@@ -24,6 +24,7 @@ scrape-bazos.exe search \
     --keyword 'ThinkCentre M90' \
     --keyword 'OptiPlex 7060' \
     --keyword 'OptiPlex 7080' \
+    --prompt-template 'pc' \
     --details-all
 
 ###################################################
@@ -68,6 +69,17 @@ scrape-bazos.exe search \
     --keyword '' \
     --prompt-template 'disk-hdd' \
     --prompt-template 'disk-ssd' \
+    --details-all
+
+###################################################
+# QUERY - PC GRAFIKA (NVIDIA + AMD + INTEL)
+###################################################
+scrape-bazos.exe search \
+    --category pc --sub-category 'graficka' \
+    --keyword '' \
+    --prompt-template 'grafika-nvidia' \
+    --prompt-template 'grafika-amd' \
+    --prompt-template 'grafika-intel' \
     --details-all
 
 ###################################################
